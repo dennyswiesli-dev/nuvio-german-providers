@@ -17,7 +17,10 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             if ((series = await pickSeries(items, meta, BASE))) break;
         }
         series = series || await bySlug(BASE, '/serie/', meta);
-        if (!series) return [];
+        if (!series) {
+            console.error('[Serienstream] series not found via search or slug');
+            return [];
+        }
         const episodePage = async path => {
             const epUrl = BASE + path;
             // an episode that does not exist answers 404
@@ -34,11 +37,14 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             if (split) page = await episodePage(split);
         }
         const { epUrl, links } = page;
+        if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
+        let redirected = 0;
         // s.to shows a captcha instead of redirecting after ~10 links per IP, so spend links on German first
         // (1 = Deutsch, 3 = Ger-Sub, 2 = Englisch) and only fall back to the next language if nothing played
         for (const langId of ['1', '3', '2']) {
             const out = await Promise.all(links.filter(l => l.langId === langId).map(async l => {
                 const embed = await followRedirect(BASE + l.url, epUrl).catch(() => null);
+                if (embed) redirected++;
                 return (await resolveEmbed(embed, epUrl)).map(s => ({
                     name: 'Serienstream', title: `${s.host} · ${l.lang}`, url: s.url, quality: s.quality, headers: s.headers,
                 }));
@@ -46,6 +52,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             const streams = [].concat(...out);
             if (streams.length) return streams;
         }
+        if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);
     } catch (e) {
         console.error(`[Serienstream] ${e.message}`);
     }

@@ -449,7 +449,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
         if (series = yield pickSeries(items, meta, BASE)) break;
       }
       series = series || (yield bySlug(BASE, "/serie/", meta));
-      if (!series) return [];
+      if (!series) {
+        console.error("[Serienstream] series not found via search or slug");
+        return [];
+      }
       const episodePage = (path) => __async(null, null, function* () {
         const epUrl2 = BASE + path;
         const $ = load(yield getText(epUrl2).catch(() => ""));
@@ -466,9 +469,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
         if (split) page = yield episodePage(split);
       }
       const { epUrl, links } = page;
+      if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
+      let redirected = 0;
       for (const langId of ["1", "3", "2"]) {
         const out = yield Promise.all(links.filter((l) => l.langId === langId).map((l) => __async(null, null, function* () {
           const embed = yield followRedirect(BASE + l.url, epUrl).catch(() => null);
+          if (embed) redirected++;
           return (yield resolveEmbed(embed, epUrl)).map((s) => ({
             name: "Serienstream",
             title: `${s.host} \xB7 ${l.lang}`,
@@ -480,6 +486,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
         const streams = [].concat(...out);
         if (streams.length) return streams;
       }
+      if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);
     } catch (e) {
       console.error(`[Serienstream] ${e.message}`);
     }
