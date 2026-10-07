@@ -397,12 +397,18 @@ function score(title, year, meta) {
 }
 
 // src/serienstream/common.js
-function followRedirect(url, referer) {
+function followRedirect(url, referer, cookie) {
   return __async(this, null, function* () {
-    const res = yield send(url, { headers: { "User-Agent": UA, Referer: referer } });
-    return res.url && res.url !== url ? res.url : null;
+    const headers = { "User-Agent": UA, Referer: referer };
+    if (cookie) headers.Cookie = cookie;
+    const res = yield send(url, { headers });
+    if (res.url && res.url !== url) return res.url;
+    const type = (res.headers && res.headers.get("content-type") || "").split(";")[0];
+    console.error(`[redirect] HTTP ${res.status} ${type || "no content-type"} stayed on ${url.replace(/^https?:\/\/[^/]+/, "")}${cookie ? "" : " (no cookie)"}`);
+    return null;
   });
 }
+var cookieHeader = (setCookie) => String(setCookie || "").split(/,(?=\s*[\w.-]+=)/).map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
 function pickSeries(items, meta, base) {
   return __async(this, null, function* () {
     const hits = items.filter((i) => score(i.title, null, meta) >= 3);
@@ -455,25 +461,27 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       const episodePage = (path) => __async(null, null, function* () {
         const epUrl2 = BASE + path;
-        const $ = load(yield getText(epUrl2).catch(() => ""));
+        const res = yield request(epUrl2).catch(() => null);
+        const cookie2 = res ? cookieHeader(res.headers.get("set-cookie")) : "";
+        const $ = load(res ? yield res.text() : "");
         const links2 = all($, ".link-wrapper button").filter((b) => b.attr("data-provider-name") !== "Provider").map((b) => ({
           url: b.attr("data-play-url"),
           lang: b.attr("data-language-label"),
           langId: b.attr("data-language-id")
         }));
-        return { epUrl: epUrl2, links: links2 };
+        return { epUrl: epUrl2, links: links2, cookie: cookie2 };
       });
       let page = yield episodePage(`${series.link}/staffel-${season}/episode-${episode}`);
       if (!page.links.length) {
         const split = yield splitSeasonPath(BASE, series.link, season, episode);
         if (split) page = yield episodePage(split);
       }
-      const { epUrl, links } = page;
+      const { epUrl, links, cookie } = page;
       if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
       let redirected = 0;
       for (const langId of ["1", "3", "2"]) {
         const out = yield Promise.all(links.filter((l) => l.langId === langId).map((l) => __async(null, null, function* () {
-          const embed = yield followRedirect(BASE + l.url, epUrl).catch(() => null);
+          const embed = yield followRedirect(BASE + l.url, epUrl, cookie).catch(() => null);
           if (embed) redirected++;
           return (yield resolveEmbed(embed, epUrl)).map((s) => ({
             name: "Serienstream",

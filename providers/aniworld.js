@@ -397,10 +397,15 @@ function resolveEmbed(url, referer) {
 }
 
 // src/serienstream/common.js
-function followRedirect(url, referer) {
+function followRedirect(url, referer, cookie) {
   return __async(this, null, function* () {
-    const res = yield send(url, { headers: { "User-Agent": UA, Referer: referer } });
-    return res.url && res.url !== url ? res.url : null;
+    const headers = { "User-Agent": UA, Referer: referer };
+    if (cookie) headers.Cookie = cookie;
+    const res = yield send(url, { headers });
+    if (res.url && res.url !== url) return res.url;
+    const type = (res.headers && res.headers.get("content-type") || "").split(";")[0];
+    console.error(`[redirect] HTTP ${res.status} ${type || "no content-type"} stayed on ${url.replace(/^https?:\/\/[^/]+/, "")}${cookie ? "" : " (no cookie)"}`);
+    return null;
   });
 }
 function pickSeries(items, meta, base) {
