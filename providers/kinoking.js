@@ -67,9 +67,33 @@ function decorate(s) {
   }
   const quality2 = s.quality && s.quality !== "auto" ? s.quality : /\.m3u8|\/hls|master/i.test(s.url) ? "HLS" : "MP4";
   const host = ((s.title || "").split(" \xB7 ")[0].match(/^[\w-]+\.[a-z]{2,}$/) || [])[0];
+  const tags = releaseTags(fileNames[s.url]);
+  if (tags.length) title = [title].concat(tags).filter(Boolean).join(" \xB7 ");
   return { lang, stream: Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(" \xB7 "), title, quality: quality2 }) };
 }
-function bestResolution(stream) {
+var CODECS = [[/hvc1|hev1|hevc|x265|h\.?265/i, "H.265"], [/avc1|x264|h\.?264/i, "H.264"], [/av01|\bav1\b/i, "AV1"], [/vp0?9/i, "VP9"]];
+var codecName = (text) => (CODECS.find(([re]) => re.test(text)) || [])[1];
+var mbit = (bps) => `${(bps / 1e6).toFixed(1).replace(".", ",")} Mbit/s`;
+var gigabytes = (bytes) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1).replace(".", ",")} GB` : `${Math.round(bytes / 1e6)} MB`;
+function releaseTags(name) {
+  return [/blu-?ray|remux|web-?dl|web-?rip|hdtv|dvd-?rip/i, /atmos|truehd|dts-?hd|dts|e-?ac-?3|ac-?3|aac/i, /x26[45]|h\.?26[45]|hevc|av1/i].map((re) => (String(name || "").match(re) || [])[0]).filter(Boolean).map((t) => /^(x|h\.?)26[45]$/i.test(t) || /hevc/i.test(t) ? codecName(t) : t);
+}
+function bestVariant(text) {
+  let best = null, m;
+  const re = /#EXT-X-STREAM-INF:([^\n]*)/g;
+  while (m = re.exec(text)) {
+    const attrs = m[1];
+    const v = {
+      height: Number((attrs.match(/RESOLUTION=\d+x(\d+)/) || [])[1]) || 0,
+      bandwidth: Number((attrs.match(/(?:^|,)BANDWIDTH=(\d+)/) || [])[1]) || 0,
+      codec: codecName((attrs.match(/CODECS="([^"]*)"/) || [])[1] || ""),
+      hdr: /dvh[1e]/.test(attrs) ? "Dolby Vision" : { PQ: "HDR10", HLG: "HLG" }[(attrs.match(/VIDEO-RANGE=(\w+)/) || [])[1]]
+    };
+    if (!best || v.height > best.height || v.height === best.height && v.bandwidth > best.bandwidth) best = v;
+  }
+  return best;
+}
+function playlistInfo(stream) {
   return __async(this, null, function* () {
     try {
       const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
@@ -77,27 +101,47 @@ function bestResolution(stream) {
         console.error(`[quality] playlist answered HTTP ${res.status}`);
         return null;
       }
-      const heights = [];
-      String(yield res.text()).replace(/RESOLUTION=\d+x(\d+)/g, (m, h) => heights.push(Number(h)));
-      if (!heights.length) console.error("[quality] playlist lists no resolutions");
-      return heights.length ? Math.max(...heights) : null;
+      const best = bestVariant(String(yield res.text()));
+      if (!best) console.error("[quality] playlist lists no variants");
+      return best;
     } catch (e) {
       console.error(`[quality] ${e.message}`);
       return null;
     }
   });
 }
-function refineQuality(streams) {
+function fileSize(stream) {
   return __async(this, null, function* () {
-    const pending = streams.slice(0, 4).filter((s) => s.quality === "HLS");
+    try {
+      const res = yield send(stream.url, { method: "HEAD", headers: Object.assign({ "User-Agent": UA }, stream.headers) });
+      const bytes = res.ok && Number(res.headers.get("content-length"));
+      return bytes > 1e6 ? bytes : null;
+    } catch (e) {
+      return null;
+    }
+  });
+}
+function addDetails(streams) {
+  return __async(this, null, function* () {
+    const pending = streams.slice(0, 4).filter((s) => /\.m3u8|\/hls|master/i.test(s.url) || /\.mp4(\?|$)/i.test(s.url) || s.quality === "HLS" || s.quality === "MP4");
     if (!pending.length) return;
     if (deadline - Date.now() < 8e3) {
       console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);
       return;
     }
     yield Promise.all(pending.map((s) => __async(null, null, function* () {
-      const h = yield bestResolution(s);
-      if (h) s.quality = `${h}p`;
+      const add = [];
+      if (s.quality === "MP4" || /\.mp4(\?|$)/i.test(s.url) && !/\.m3u8/i.test(s.url)) {
+        const bytes = yield fileSize(s);
+        if (bytes) add.push(gigabytes(bytes));
+      } else {
+        const v = yield playlistInfo(s);
+        if (!v) return;
+        if (v.height && s.quality === "HLS") s.quality = `${v.height}p`;
+        add.push(v.codec, v.bandwidth && mbit(v.bandwidth), v.hdr);
+      }
+      const extra = add.filter((t) => t && !String(s.title || "").includes(t));
+      if (extra.length) s.title = [s.title].concat(extra).filter(Boolean).join(" \xB7 ");
     })));
   });
 }
@@ -116,7 +160,7 @@ function provider(getStreams2) {
         if (running) yield new Promise((resolve2) => idle.push(resolve2));
         const rank = (lang) => lang === "Deutsch" ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2;
         const sorted = streams.map(decorate).map((d, i) => [rank(d.lang), i, d.stream]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((d) => d[2]);
-        yield refineQuality(sorted);
+        yield addDetails(sorted);
         if (running) yield new Promise((resolve2) => idle.push(resolve2));
         return sorted;
       });
