@@ -15,7 +15,8 @@
         "tmdbId": 680
       }
     ],
-    "optional": true
+    "optional": true,
+    "probe": "https://api.netzkino.de.simplecache.net/capi-2.0a/search?q=matrix&d=www"
   },
   "ard": {
     "candidates": [
@@ -36,7 +37,8 @@
         "episode": 1
       }
     ],
-    "optional": true
+    "optional": true,
+    "probe": "https://api.ardmediathek.de/search-system/search/shows/ard?query=tatort&pageSize=1&platform=MEDIA_THEK"
   },
   "plutotv": {
     "candidates": [
@@ -128,7 +130,8 @@
         "season": 1,
         "episode": 1
       }
-    ]
+    ],
+    "probe": "https://serienstream.to/suche?term=breaking%20bad&tab=shows"
   },
   "aniworld": {
     "candidates": [
@@ -206,7 +209,8 @@
         "episode": 1
       }
     ],
-    "optional": true
+    "optional": true,
+    "probe": "https://www.southpark.de/seasons/south-park"
   },
   "moflix": {
     "candidates": [
@@ -252,7 +256,8 @@
         "season": 1,
         "episode": 1
       }
-    ]
+    ],
+    "probe": "https://filmpalast.to/"
   },
   "megakino": {
     "candidates": [
@@ -285,8 +290,27 @@
         "tmdbId": 1396,
         "season": 1,
         "episode": 1
+      },
+      {
+        "type": "tv",
+        "tmdbId": 1668,
+        "season": 1,
+        "episode": 1
+      },
+      {
+        "type": "tv",
+        "tmdbId": 1399,
+        "season": 1,
+        "episode": 1
+      },
+      {
+        "type": "tv",
+        "tmdbId": 1418,
+        "season": 1,
+        "episode": 1
       }
-    ]
+    ],
+    "probe": "https://kinoking.cc/"
   },
   "kellerkino": {
     "candidates": [
@@ -298,6 +322,7 @@
         "type": "movie",
         "tmdbId": 603
       }
-    ]
+    ],
+    "probe": "https://www.kellerkino.com/wp-json/wp/v2/search?search=matrix&per_page=1"
   }
 }

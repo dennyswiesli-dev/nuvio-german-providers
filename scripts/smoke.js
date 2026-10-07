@@ -21,6 +21,19 @@ console.error = (...args) => { logged.push(args.map(String).join(' ').replace(/\
 const BLOCKED = /HTTP (401|403|429|451|503)|captcha|cloudflare|challenge|timeout|ECONNRESET|ENOTFOUND|ETIMEDOUT|fetch failed/i;
 const withTimeout = (p, s) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), s * 1000))]);
 
+const CHALLENGE = /just a moment|cf-chl|challenge-platform|cf-browser-verification|captcha|attention required/i;
+async function probe(url) {
+    try {
+        const res = await withTimeout(fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' } }), 30);
+        const body = await res.text();
+        if ([401, 403, 429, 451, 503].includes(res.status)) return { blocked: true, note: `HTTP ${res.status}, Seite lässt diese IP nicht herein` };
+        if (CHALLENGE.test(body)) return { blocked: true, note: `HTTP ${res.status}, Cloudflare-/Captcha-Prüfung statt Inhalt` };
+        return { blocked: false, note: `HTTP ${res.status}, erreichbar` };
+    } catch (e) {
+        return { blocked: true, note: e.message };
+    }
+}
+
 async function check(id) {
     const entry = config[id];
     if (!entry) return { id, status: 'fail', note: 'no smoke candidates in scripts/smoke.json' };
@@ -40,8 +53,15 @@ async function check(id) {
         if (BLOCKED.test(why)) blocked = true;
         notes.push(`${label}: ${why || 'no match'}`);
     }
+    // the provider's own log may be silent (captcha pages are HTTP 200), so ask the site directly whether this IP is let in
+    let probed = '';
+    if (entry.probe) {
+        const p = await probe(entry.probe);
+        if (p.blocked) blocked = true;
+        probed = ` | Direktaufruf der Seite: ${p.note}`;
+    }
     const status = blocked ? 'blocked' : entry.optional ? 'optional' : 'fail';
-    return { id, status, note: notes.join('; ') };
+    return { id, status, note: notes.join('; ') + probed };
 }
 
 (async () => {
