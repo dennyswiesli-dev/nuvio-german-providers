@@ -4,10 +4,19 @@ import { score } from '../../shared/match.js';
 // Aniworld and Serienstream hide hosters behind a 30x redirect. Let the client follow it and take the final URL:
 // aniworld sends that 301 with "content-encoding: gzip" and an empty body, which OkHttp (Nuvio desktop/Android)
 // can only survive by not reading it, and Nuvio strips any Accept-Encoding a plugin sets (iOS ignores manual redirects anyway).
-export async function followRedirect(url, referer) {
-    const res = await send(url, { headers: { 'User-Agent': UA, Referer: referer } });
-    return res.url && res.url !== url ? res.url : null;
+export async function followRedirect(url, referer, cookie) {
+    const headers = { 'User-Agent': UA, Referer: referer };
+    if (cookie) headers.Cookie = cookie;
+    const res = await send(url, { headers });
+    if (res.url && res.url !== url) return res.url;
+    // no redirect: s.to answers with its captcha page instead (the body is not read, see send() in http.js)
+    const type = ((res.headers && res.headers.get('content-type')) || '').split(';')[0];
+    console.error(`[redirect] HTTP ${res.status} ${type || 'no content-type'} stayed on ${url.replace(/^https?:\/\/[^/]+/, '')}${cookie ? '' : ' (no cookie)'}`);
+    return null;
 }
+
+// "a=1; Path=/, b=2; Expires=Wed, 01 Jan 2030 ..." -> "a=1; b=2"
+export const cookieHeader = setCookie => String(setCookie || '').split(/,(?=\s*[\w.-]+=)/).map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
 
 // exact title matches only; several (remakes, same-name shows) -> the one whose page links the TMDB IMDb id
 export async function pickSeries(items, meta, base) {

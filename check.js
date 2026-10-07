@@ -60,5 +60,12 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     assert.strictEqual(await splitSeasonPath('https://a.example', '/anime/stream/x', 2, 26), '/anime/stream/x/staffel-3/episode-1');
     assert.strictEqual(await splitSeasonPath('https://a.example', '/anime/stream/x', 1, 5), null);
     assert.strictEqual(await splitSeasonPath('https://a.example', '/anime/stream/x', 1, 999), null);
+    // s.to's hoster links may need the cookie of the episode page
+    const { cookieHeader, followRedirect } = require('./node_modules/.cache/check/common.js');
+    assert.strictEqual(cookieHeader('a=1; Path=/; HttpOnly, b=2; Expires=Wed, 01 Jan 2031 00:00:00 GMT; Path=/'), 'a=1; b=2');
+    let sent;
+    globalThis.fetch = async (url, opts) => { sent = opts.headers; return { ok: true, status: 200, url: 'https://hoster.example/e/1', headers: { get: () => null } }; };
+    assert.strictEqual(await followRedirect('https://s.example/r/1', 'https://s.example/ep', 'a=1'), 'https://hoster.example/e/1');
+    assert.strictEqual(sent.Cookie, 'a=1');
     console.log('check ok');
 })();
