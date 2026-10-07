@@ -54,19 +54,29 @@ function decorate(s) {
 async function bestResolution(stream) {
     try {
         const res = await send(stream.url, { headers: Object.assign({ 'User-Agent': UA }, stream.headers) });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            console.error(`[quality] playlist answered HTTP ${res.status}`);
+            return null;
+        }
         const heights = [];
         String(await res.text()).replace(/RESOLUTION=\d+x(\d+)/g, (m, h) => heights.push(Number(h)));
+        if (!heights.length) console.error('[quality] playlist lists no resolutions');
         return heights.length ? Math.max(...heights) : null;
     } catch (e) {
+        console.error(`[quality] ${e.message}`);
         return null;
     }
 }
 
 async function refineQuality(streams) {
     // only the first few (the German ones come first) and only while enough of the time budget is left
-    if (deadline - Date.now() < 8000) return;
-    await Promise.all(streams.slice(0, 4).filter(s => s.quality === 'HLS').map(async s => {
+    const pending = streams.slice(0, 4).filter(s => s.quality === 'HLS');
+    if (!pending.length) return;
+    if (deadline - Date.now() < 8000) {
+        console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1000))}s of the time budget left`);
+        return;
+    }
+    await Promise.all(pending.map(async s => {
         const h = await bestResolution(s);
         if (h) s.quality = `${h}p`;
     }));

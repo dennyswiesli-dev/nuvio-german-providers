@@ -73,19 +73,29 @@ function bestResolution(stream) {
   return __async(this, null, function* () {
     try {
       const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error(`[quality] playlist answered HTTP ${res.status}`);
+        return null;
+      }
       const heights = [];
       String(yield res.text()).replace(/RESOLUTION=\d+x(\d+)/g, (m, h) => heights.push(Number(h)));
+      if (!heights.length) console.error("[quality] playlist lists no resolutions");
       return heights.length ? Math.max(...heights) : null;
     } catch (e) {
+      console.error(`[quality] ${e.message}`);
       return null;
     }
   });
 }
 function refineQuality(streams) {
   return __async(this, null, function* () {
-    if (deadline - Date.now() < 8e3) return;
-    yield Promise.all(streams.slice(0, 4).filter((s) => s.quality === "HLS").map((s) => __async(null, null, function* () {
+    const pending = streams.slice(0, 4).filter((s) => s.quality === "HLS");
+    if (!pending.length) return;
+    if (deadline - Date.now() < 8e3) {
+      console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);
+      return;
+    }
+    yield Promise.all(pending.map((s) => __async(null, null, function* () {
       const h = yield bestResolution(s);
       if (h) s.quality = `${h}p`;
     })));
@@ -496,7 +506,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
         const res = yield request(epUrl2).catch(() => null);
         const cookie2 = res ? cookieHeader(res.headers.get("set-cookie")) : "";
         const $ = load(res ? yield res.text() : "");
-        const links2 = all($, ".link-wrapper button").filter((b) => b.attr("data-provider-name") !== "Provider").map((b) => ({
+        const links2 = all($, ".link-wrapper button").filter((b) => !/^Provider$|dood/i.test(b.attr("data-provider-name") || "")).map((b) => ({
           url: b.attr("data-play-url"),
           lang: b.attr("data-language-label"),
           langId: b.attr("data-language-id")
@@ -512,18 +522,19 @@ function getStreams(tmdbId, mediaType, season, episode) {
       if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
       let redirected = 0;
       for (const langId of ["1", "3", "2"]) {
-        const out = yield Promise.all(links.filter((l) => l.langId === langId).map((l) => __async(null, null, function* () {
+        const streams = [];
+        for (const l of links.filter((l2) => l2.langId === langId)) {
           const embed = yield followRedirect(BASE + l.url, epUrl, cookie).catch(() => null);
           if (embed) redirected++;
-          return (yield resolveEmbed(embed, epUrl)).map((s) => ({
+          (yield resolveEmbed(embed, epUrl)).forEach((s) => streams.push({
             name: "Serienstream",
             title: `${s.host} \xB7 ${l.lang}`,
             url: s.url,
             quality: s.quality,
             headers: s.headers
           }));
-        })));
-        const streams = [].concat(...out);
+          if (streams.length >= 2) break;
+        }
         if (streams.length) return streams;
       }
       if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);

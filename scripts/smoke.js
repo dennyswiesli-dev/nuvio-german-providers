@@ -45,7 +45,7 @@ async function check(id) {
         logged.length = 0;
         try {
             const streams = await withTimeout(getStreams(String(c.tmdbId), c.type, c.season || null, c.episode || null), entry.timeout || 90);
-            if (streams && streams.length && /^https?:/.test(streams[0].url)) return { id, status: 'ok', note: `${streams.length} stream(s) for ${label}` };
+            if (streams && streams.length && /^https?:/.test(streams[0].url)) return { id, status: 'ok', note: `${streams.length} stream(s) for ${label} (${streams.slice(0, 6).map(s => s.quality).join(', ')})` };
         } catch (e) {
             logged.push(e.message);
         }

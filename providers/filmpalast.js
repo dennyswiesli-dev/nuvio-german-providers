@@ -73,19 +73,29 @@ function bestResolution(stream) {
   return __async(this, null, function* () {
     try {
       const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error(`[quality] playlist answered HTTP ${res.status}`);
+        return null;
+      }
       const heights = [];
       String(yield res.text()).replace(/RESOLUTION=\d+x(\d+)/g, (m, h) => heights.push(Number(h)));
+      if (!heights.length) console.error("[quality] playlist lists no resolutions");
       return heights.length ? Math.max(...heights) : null;
     } catch (e) {
+      console.error(`[quality] ${e.message}`);
       return null;
     }
   });
 }
 function refineQuality(streams) {
   return __async(this, null, function* () {
-    if (deadline - Date.now() < 8e3) return;
-    yield Promise.all(streams.slice(0, 4).filter((s) => s.quality === "HLS").map((s) => __async(null, null, function* () {
+    const pending = streams.slice(0, 4).filter((s) => s.quality === "HLS");
+    if (!pending.length) return;
+    if (deadline - Date.now() < 8e3) {
+      console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);
+      return;
+    }
+    yield Promise.all(pending.map((s) => __async(null, null, function* () {
       const h = yield bestResolution(s);
       if (h) s.quality = `${h}p`;
     })));
@@ -470,7 +480,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }).filter((m) => /^https?:/.test(m.link || ""));
       const streams = yield Promise.all(mirrors.map((m) => resolveEmbed(m.link, BASE + "/").then((r) => r.map((s) => ({
         name: "FilmPalast",
-        title: `${m.host || s.host} \xB7 Deutsch${s.quality !== "auto" ? " \xB7 " + s.quality : ""}`,
+        title: `${s.host || m.host} \xB7 Deutsch${s.quality !== "auto" ? " \xB7 " + s.quality : ""}`,
         url: s.url,
         quality: s.quality,
         headers: s.headers
