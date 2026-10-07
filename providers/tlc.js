@@ -49,6 +49,13 @@ var LANGS = [[/japanisch, dt\. ut/i, "Japanisch, dt. UT"], [/japanisch, engl\. u
   [/japanisch/i, "Japanisch"],
   [/deutsch|\bde\b/i, "Deutsch"]
 ]);
+var FLAGS = { Deutsch: "\u{1F1E9}\u{1F1EA}", Englisch: "\u{1F1EC}\u{1F1E7}", Franz\u00F6sisch: "\u{1F1EB}\u{1F1F7}", Spanisch: "\u{1F1EA}\u{1F1F8}", Japanisch: "\u{1F1EF}\u{1F1F5}", OV: "\u{1F310}", OmU: "\u{1F310} UT" };
+var SUB_FLAGS = { "dt. UT": "\u{1F1E9}\u{1F1EA}", "engl. UT": "\u{1F1EC}\u{1F1E7}" };
+function flagLabel(lang) {
+  const sub = lang.match(/^(.*), (dt\. UT|engl\. UT)$/);
+  if (sub) return `${sub[1] === "Original" ? "\u{1F310}" : FLAGS[sub[1]] || sub[1]} UT ${SUB_FLAGS[sub[2]]}`;
+  return FLAGS[lang] || lang;
+}
 var fileNames = {};
 function decorate(s) {
   const hit = LANGS.find(([re]) => re.test(s.title || ""));
@@ -60,7 +67,29 @@ function decorate(s) {
   }
   const quality = s.quality && s.quality !== "auto" ? s.quality : /\.m3u8|\/hls|master/i.test(s.url) ? "HLS" : "MP4";
   const host = ((s.title || "").split(" \xB7 ")[0].match(/^[\w-]+\.[a-z]{2,}$/) || [])[0];
-  return { lang, stream: Object.assign({}, s, { name: [s.name, lang, host].filter(Boolean).join(" \xB7 "), title, quality }) };
+  return { lang, stream: Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(" \xB7 "), title, quality }) };
+}
+function bestResolution(stream) {
+  return __async(this, null, function* () {
+    try {
+      const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
+      if (!res.ok) return null;
+      const heights = [];
+      String(yield res.text()).replace(/RESOLUTION=\d+x(\d+)/g, (m, h) => heights.push(Number(h)));
+      return heights.length ? Math.max(...heights) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+}
+function refineQuality(streams) {
+  return __async(this, null, function* () {
+    if (deadline - Date.now() < 8e3) return;
+    yield Promise.all(streams.slice(0, 4).filter((s) => s.quality === "HLS").map((s) => __async(null, null, function* () {
+      const h = yield bestResolution(s);
+      if (h) s.quality = `${h}p`;
+    })));
+  });
 }
 function provider(getStreams2) {
   return {
@@ -76,7 +105,10 @@ function provider(getStreams2) {
         }
         if (running) yield new Promise((resolve) => idle.push(resolve));
         const rank = (lang) => lang === "Deutsch" ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2;
-        return streams.map(decorate).map((d, i) => [rank(d.lang), i, d.stream]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((d) => d[2]);
+        const sorted = streams.map(decorate).map((d, i) => [rank(d.lang), i, d.stream]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((d) => d[2]);
+        yield refineQuality(sorted);
+        if (running) yield new Promise((resolve) => idle.push(resolve));
+        return sorted;
       });
     }
   };
