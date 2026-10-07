@@ -37,19 +37,23 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     assert.deepStrictEqual(named.map(s => s.name), ['X · 🇩🇪 · voe.sx', 'X · 🌐 UT 🇩🇪 · voe.sx', 'X · 🌐 UT 🇩🇪 · voe.sx',
         'X · 🇯🇵 UT 🇩🇪 · voe.sx', 'X · 🇬🇧 · voe.sx']);
     assert.deepStrictEqual(named.map(s => s.url.slice(-1)), ['5', '1', '2', '3', '4']);
-    assert.strictEqual(named[2].title, 'voe.sx · Original, dt. UT');
+    assert.strictEqual(named[2].title, 'voe.sx · Original, dt. UT · BluRay · AC3 · H.264');
 
-    // "HLS" becomes the best resolution of the master playlist; a failing playlist keeps "HLS"
-    globalThis.fetch = async url => url.includes('good')
-        ? { ok: true, text: async () => '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=1280x720\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2,RESOLUTION=1920x1080\nb.m3u8' }
-        : { ok: false, status: 403 };
+    // "HLS" becomes the best resolution of the master playlist, codec/bitrate/HDR join the title, MP4 gets its size from a HEAD
+    // request; failing playlists and servers keep the plain labels
+    globalThis.fetch = async (url, opts = {}) => {
+        if (url.includes('good')) return { ok: true, text: async () => '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720,CODECS="avc1.4d401f"\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS="hvc1.2.4.L120",VIDEO-RANGE=PQ\nb.m3u8' };
+        if (url.includes('sized') && opts.method === 'HEAD') return { ok: true, headers: { get: h => (h === 'content-length' ? '1500000000' : null) } };
+        return { ok: false, status: 403 };
+    };
     const hls = await provider(async () => [
         { name: 'X', title: 'voe.sx', url: 'https://cdn/good/master.m3u8', quality: 'auto' },
         { name: 'X', title: 'voe.sx', url: 'https://cdn/bad/master.m3u8', quality: 'auto' },
-        { name: 'X', title: 'voe.sx', url: 'https://cdn/video.mp4', quality: 'auto' },
+        { name: 'X', title: 'voe.sx', url: 'https://cdn/sized.mp4', quality: 'auto' },
         { name: 'X', title: 'voe.sx', url: 'https://cdn/x.mp4', quality: '720p' },
     ]).getStreams('1', 'movie');
     assert.deepStrictEqual(hls.map(s => s.quality), ['1080p', 'HLS', 'MP4', '720p']);
+    assert.deepStrictEqual(hls.map(s => s.title), ['voe.sx · H.265 · 6,0 Mbit/s · HDR10', 'voe.sx', 'voe.sx · 1,5 GB', 'voe.sx']);
 
     // Dood only ever answers with a Cloudflare challenge, so it must not cost a request
     let asked = 0;
