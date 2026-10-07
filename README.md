@@ -34,7 +34,7 @@ https://dennyswiesli-dev.github.io/nuvio-german-providers/manifest.json
 | Netzkino | Filme | Suche der Netzkino-API ist lückenhaft |
 | FilmFrei24, Filmo, FlixiTV, KellerKino, Megakino, FilmPalast, HDFilme, Moflix, Huhu | Filme (teils Serien) | über Hoster wie VOE, Vidara, VidSonic, FireStream, MixDrop … |
 | KinoKing | Serien | Filme sind abgeschaltet: die Filmseite braucht 12–20 s pro Abruf |
-| Serienstream, Aniworld | Serien / Anime | s.to zeigt nach ~10 Links pro IP ein Captcha, dann fehlen weitere Links |
+| Serienstream, Aniworld | Serien / Anime | s.to zeigt nach ~10 Links pro IP ein Captcha, dann fehlen weitere Links; hilft ein IP-Wechsel (z. B. Mobilfunk statt WLAN) |
 
 
 

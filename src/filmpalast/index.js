@@ -34,7 +34,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         }).filter(m => /^https?:/.test(m.link || ''));
         const streams = await Promise.all(mirrors.map(m => resolveEmbed(m.link, BASE + '/').then(r => r.map(s => ({
             name: 'FilmPalast',
-            title: `${m.host || s.host} · Deutsch${s.quality !== 'auto' ? ' · ' + s.quality : ''}`,
+            title: `${s.host || m.host} · Deutsch${s.quality !== 'auto' ? ' · ' + s.quality : ''}`,
             url: s.url,
             quality: s.quality,
             headers: s.headers,

@@ -29,7 +29,8 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             const cookie = res ? cookieHeader(res.headers.get('set-cookie')) : '';
             const $ = load(res ? await res.text() : '');
             // "Provider" links always answer 410
-            const links = all($, '.link-wrapper button').filter(b => b.attr('data-provider-name') !== 'Provider').map(b => ({
+            // Doodstream answers every non-browser client with a Cloudflare challenge, so a link spent on it is wasted
+            const links = all($, '.link-wrapper button').filter(b => !/^Provider$|dood/i.test(b.attr('data-provider-name') || '')).map(b => ({
                 url: b.attr('data-play-url'), lang: b.attr('data-language-label'), langId: b.attr('data-language-id'),
             }));
             return { epUrl, links, cookie };
@@ -43,16 +44,18 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
         let redirected = 0;
         // s.to shows a captcha instead of redirecting after ~10 links per IP, so spend links on German first
-        // (1 = Deutsch, 3 = Ger-Sub, 2 = Englisch) and only fall back to the next language if nothing played
+        // (1 = Deutsch, 3 = Ger-Sub, 2 = Englisch), one after the other, and stop as soon as two streams are in
+        // (one VOE link already gives HLS and MP4); only fall back to the next language if nothing played
         for (const langId of ['1', '3', '2']) {
-            const out = await Promise.all(links.filter(l => l.langId === langId).map(async l => {
+            const streams = [];
+            for (const l of links.filter(l => l.langId === langId)) {
                 const embed = await followRedirect(BASE + l.url, epUrl, cookie).catch(() => null);
                 if (embed) redirected++;
-                return (await resolveEmbed(embed, epUrl)).map(s => ({
+                (await resolveEmbed(embed, epUrl)).forEach(s => streams.push({
                     name: 'Serienstream', title: `${s.host} · ${l.lang}`, url: s.url, quality: s.quality, headers: s.headers,
                 }));
-            }));
-            const streams = [].concat(...out);
+                if (streams.length >= 2) break;
+            }
             if (streams.length) return streams;
         }
         if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);
