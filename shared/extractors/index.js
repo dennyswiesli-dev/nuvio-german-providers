@@ -41,4 +41,18 @@ export async function resolveEmbed(url, referer) {
     }
 }
 
-export const resolveAll = (urls, referer) => gather(urls, u => resolveEmbed(u, referer));
+// Which hosters to try first. Together with the early stop in gather() this decides which streams a list is built from.
+// An educated guess, not measured: VOE and Vidsonic/Vidara are the ones that work for the most people, Dood never does.
+const PREFERRED = [/voe|goofy-banana|nathanfromsubject|metagnathtuggers/, /vidsonic|vidara|odysseusa/, /vidhide|filelions|ryderjet|smoothpre|dhtpre|peytonepre/,
+    /streamwish|wishembed|luluvdo|lulustream|swdyu|strwish|streamruby|savefiles/, /supervideo|dropload|abstream|dr0pstream/, /filemoon/, /vidoza|videzz/,
+    /streamtape|shavetape|watchadsontape/, /mixdrop|mixdrp|mxdrop/];
+const hosterRank = text => {
+    const t = String(text || '').toLowerCase();
+    if (/dood|d000d|vide0\.net|playmogo|dsvplay|ds2play/.test(t)) return PREFERRED.length + 1;
+    const i = PREFERRED.findIndex(re => re.test(t));
+    return i < 0 ? 3 : i; // unknown hosters rank in the middle
+};
+// stable: equal ranks keep the site's order. text(item) is the host's URL or name
+export const byHoster = (items, text = x => x) => items.map((x, i) => [x, i]).sort(([a, i], [b, j]) => hosterRank(text(a)) - hosterRank(text(b)) || i - j).map(([x]) => x);
+
+export const resolveAll = (urls, referer) => gather(byHoster(urls), u => resolveEmbed(u, referer));

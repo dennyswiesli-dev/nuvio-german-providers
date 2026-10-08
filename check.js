@@ -120,5 +120,28 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     globalThis.fetch = async (url, opts) => { sent = opts.headers; return { ok: true, status: 200, url: 'https://hoster.example/e/1', headers: { get: () => null } }; };
     assert.strictEqual(await followRedirect('https://s.example/r/1', 'https://s.example/ep', 'a=1'), 'https://hoster.example/e/1');
     assert.strictEqual(sent.Cookie, 'a=1');
+    // better hosters first, Dood last, equal ranks keep the site's order
+    const { byHoster } = require('./node_modules/.cache/check/extractors/index.js');
+    assert.deepStrictEqual(byHoster(['https://mixdrop.ps/e/1', 'https://dood.to/e/2', 'https://other.example/e/3', 'https://voe.sx/e/4', 'https://vidsonic.net/e/5', 'https://unknown.example/e/6']),
+        ['https://voe.sx/e/4', 'https://vidsonic.net/e/5', 'https://other.example/e/3', 'https://unknown.example/e/6', 'https://mixdrop.ps/e/1', 'https://dood.to/e/2']);
+    assert.deepStrictEqual(byHoster([{ h: 'Streamtape' }, { h: 'VOE' }, { h: 'Doodstream' }], x => x.h).map(x => x.h), ['VOE', 'Streamtape', 'Doodstream']);
+
+    // TMDB: plugins in one runtime share the answer; a failed request is not kept
+    esbuild.buildSync({ entryPoints: ['shared/tmdb.js'], outfile: 'node_modules/.cache/check/tmdb.js', bundle: true, format: 'cjs', platform: 'neutral' });
+    const { getMeta } = require('./node_modules/.cache/check/tmdb.js');
+    let tmdbCalls = 0, fail = true;
+    globalThis.fetch = async () => {
+        tmdbCalls++;
+        if (fail) throw new Error('network');
+        return { ok: true, text: async () => JSON.stringify({ title: 'Dexter', original_title: 'Dexter', first_air_date: '2006-10-01', external_ids: { imdb_id: 'tt0773262' } }) };
+    };
+    await getMeta('1405', 'tv').catch(() => {});
+    fail = false;
+    const [m1, m2] = await Promise.all([getMeta('1405', 'tv'), getMeta('1405', 'tv')]);
+    assert.strictEqual(tmdbCalls, 2, 'one failed and one successful request, the second caller shares the first');
+    assert.strictEqual(m1, m2);
+    assert.strictEqual(m1.imdbId, 'tt0773262');
+    await getMeta('1405', 'tv');
+    assert.strictEqual(tmdbCalls, 2, 'cached');
     console.log('check ok');
 })();

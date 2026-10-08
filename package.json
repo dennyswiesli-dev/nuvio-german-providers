@@ -1,6 +1,6 @@
 {
   "name": "nuvio-german-providers",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Deutsche Quellen für Nuvio, portiert von Bnyro/GermanProviders",
   "private": true,
   "scripts": {
@@ -10,6 +10,7 @@
     "smoke": "node scripts/smoke.js",
     "bump": "node scripts/bump.js",
     "meta": "node scripts/sync-meta.js",
+    "check:version": "node scripts/check-version-bump.js",
     "meta:check": "node scripts/sync-meta.js --check && node scripts/bump.js --check",
     "start": "npx --yes serve -l 3000 ."
   },
