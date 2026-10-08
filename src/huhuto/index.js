@@ -1,4 +1,4 @@
-import { request, provider } from '../../shared/http.js';
+import { request, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { resolveEmbed } from '../../shared/extractors/index.js';
 
@@ -36,7 +36,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         // German sources first: Nuvio TV runs a plugin's requests one after the other
         const german = s => ((s.languages || ['de']).includes('de') ? 0 : 1);
         const list = (await sources(meta, season, episode)).filter(s => s.type === 'url' && s.url).sort((a, b) => german(a) - german(b));
-        return [].concat(...await Promise.all(list.map(s => resolve(s).catch(() => []))));
+        return gather(list, resolve);
     } catch (e) {
         console.error(`[Huhu] ${e.message}`);
     }

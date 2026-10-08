@@ -1,4 +1,5 @@
 import * as h from './hosters.js';
+import { gather } from '../http.js';
 
 // host (without www.) -> decoder; mirrors from GermanProviders' extractor registrations + CloudStream core
 const HOSTS = [
@@ -40,4 +41,4 @@ export async function resolveEmbed(url, referer) {
     }
 }
 
-export const resolveAll = async (urls, referer) => [].concat(...await Promise.all(urls.map(u => resolveEmbed(u, referer))));
+export const resolveAll = (urls, referer) => gather(urls, u => resolveEmbed(u, referer));

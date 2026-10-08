@@ -1,4 +1,4 @@
-import { getText, postForm, provider } from '../../shared/http.js';
+import { getText, postForm, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { norm } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
@@ -65,14 +65,13 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             if (split) page = await episodePage(split);
         }
         const { epUrl, $, links } = page;
-        const out = await Promise.all(links.map(async l => {
+        return gather(links, async l => {
             const embed = await followRedirect(BASE + l.url, epUrl).catch(() => null);
             const lang = LANG[l.lang] || $(`.changeLanguageBox img[data-lang-key="${l.lang}"]`).attr('title') || '';
             return (await resolveEmbed(embed, epUrl)).map(s => ({
                 name: 'Aniworld', title: `${s.host} · ${lang}`, url: s.url, quality: s.quality, headers: s.headers,
             }));
-        }));
-        return [].concat(...out);
+        });
     } catch (e) {
         console.error(`[Aniworld] ${e.message}`);
     }

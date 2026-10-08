@@ -1,4 +1,4 @@
-import { getText, provider } from '../../shared/http.js';
+import { getText, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { pickBest } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
@@ -38,7 +38,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         const json = (html.match(/const allEpisodesData = (.*)/) || [])[1];
         const ep = JSON.parse(json.replace(/;\s*$/, '')).find(e => +e.season_number === season && +e.episode_number === episode);
         const embeds = (ep ? (ep.video_links || '').split(',') : []).map(e => e.trim()).filter((e, i, a) => e && a.indexOf(e) === i);
-        const streams = [].concat(...await Promise.all(embeds.map(resolve)));
+        const streams = await gather(embeds, resolve);
         return streams.map(s => ({
             name: 'KinoKing',
             title: `${s.host} · Deutsch · ${s.quality}`,

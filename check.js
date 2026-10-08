@@ -23,37 +23,61 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     assert.deepStrictEqual(streams, []);
     assert.ok(finished, 'getStreams answered while a request was still running');
 
-    // German dub first, then German subtitles, then the rest; huhu.to files "…GerSub…" under plain German
+    // only the best language that exists: German dub, else German subtitles, else everything; huhu.to files "…GerSub…" under plain German
+    globalThis.fetch = async () => ({ ok: false, status: 405 });
     const { fileNames } = require('./node_modules/.cache/check/http.js');
-    fileNames['https://v/2'] = 'KonoSuba E01 GerSub AC3 720p BluRay x264-Fuuko';
-    fileNames['https://v/5'] = 'KonoSuba E01 German AC3 720p BluRay x264-Fuuko';
-    const named = await provider(async () => [
-        { name: 'X', title: 'voe.sx · Ger-Sub', url: 'https://v/1' },
-        { name: 'X', title: 'voe.sx · DE', url: 'https://v/2' },
-        { name: 'X', title: 'voe.sx · Japanisch, dt. UT', url: 'https://v/3' },
-        { name: 'X', title: 'voe.sx · Englisch', url: 'https://v/4' },
-        { name: 'X', title: 'voe.sx · Deutsch', url: 'https://v/5' },
-    ]).getStreams('1', 'tv', 1, 1);
-    assert.deepStrictEqual(named.map(s => s.name), ['X · 🇩🇪 · voe.sx', 'X · 🌐 UT 🇩🇪 · voe.sx', 'X · 🌐 UT 🇩🇪 · voe.sx',
-        'X · 🇯🇵 UT 🇩🇪 · voe.sx', 'X · 🇬🇧 · voe.sx']);
-    assert.deepStrictEqual(named.map(s => s.url.slice(-1)), ['5', '1', '2', '3', '4']);
-    assert.strictEqual(named[2].title, 'voe.sx · Original, dt. UT · BluRay · AC3 · H.264');
+    const names = async (list) => (await provider(async () => list).getStreams('1', 'tv', 1, 1)).map(s => s.name);
+    const s = (title, url) => ({ name: 'X', title, url });
+    fileNames['https://v/gersub'] = 'KonoSuba E01 GerSub AC3 720p BluRay x264-Fuuko';
+    assert.deepStrictEqual(await names([s('voe.sx · Ger-Sub', 'https://v/1'), s('mixdrop.ps · Englisch', 'https://v/2'), s('streamtape.com · Deutsch', 'https://v/3')]),
+        ['X · 🇩🇪 · streamtape.com']);
+    // the file name outranks a title that only says German: that "DE" file is subtitled, so it is no dub
+    assert.deepStrictEqual(await names([s('voe.sx · DE', 'https://v/gersub'), s('mixdrop.ps · Englisch', 'https://v/4'), s('vidoza.net · Japanisch, dt. UT', 'https://v/5')]),
+        ['X · 🌐 UT 🇩🇪 · voe.sx', 'X · 🇯🇵 UT 🇩🇪 · vidoza.net']);
+    assert.deepStrictEqual(await names([s('mixdrop.ps · Englisch', 'https://v/6'), s('voe.sx · Französisch', 'https://v/7')]),
+        ['X · 🇬🇧 · mixdrop.ps', 'X · 🇫🇷 · voe.sx']);
+    // the file name adds source and audio tags to the title
+    const tagged = await provider(async () => [s('voe.sx · DE', 'https://v/gersub')]).getStreams('1', 'tv', 1, 1);
+    assert.strictEqual(tagged[0].title, 'voe.sx · Original, dt. UT · BluRay · AC3 · H.264');
+
+    // camera recordings go unless nothing else is left
+    const q = (host, quality, url) => ({ name: 'X', title: `${host} · Deutsch`, url: url || `https://${host}/v.mp4`, quality });
+    assert.deepStrictEqual((await provider(async () => [q('a.com', 'CAM'), q('b.com', '720p')]).getStreams('1', 'movie')).map(x => x.title), ['b.com · Deutsch']);
+    assert.strictEqual((await provider(async () => [q('a.com', 'HDCAM')]).getStreams('1', 'movie')).length, 1);
+
+    // best resolution first, one entry per hoster, 360p and below dropped, at most four, unknown resolutions last
+    const mix = await provider(async () => [q('a.com', '360p'), q('b.com', '1080p'), q('c.com', '480p'), q('c.com', '720p'), q('d.com', '480p'), q('e.com', 'auto'), q('f.com', '1080p')]).getStreams('1', 'movie');
+    assert.deepStrictEqual(mix.map(x => `${x.title.split(' · ')[0]} ${x.quality}`), ['b.com 1080p', 'f.com 1080p', 'c.com 720p', 'd.com 480p']);
+    // nothing better than 360p: show it anyway
+    assert.strictEqual((await provider(async () => [q('a.com', '360p'), q('b.com', '240p')]).getStreams('1', 'movie')).length, 2);
+
+    // stop starting requests once enough streams are in
+    const { gather } = require('./node_modules/.cache/check/http.js');
+    const started = [];
+    const got = await gather([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], async n => { started.push(n); return [n]; });
+    assert.deepStrictEqual(started, [1, 2, 3, 4, 5, 6]);
+    assert.strictEqual(got.length, 6);
+    assert.deepStrictEqual(await gather([1, 2], async n => { if (n === 1) throw new Error('x'); return [n]; }), [2]);
 
     // "HLS" becomes the best resolution of the master playlist, codec/bitrate/HDR join the title, MP4 gets its size from a HEAD
-    // request; failing playlists and servers keep the plain labels
+    // request; failing playlists and servers keep the plain labels, vanished ones (404/410) are dropped
     globalThis.fetch = async (url, opts = {}) => {
         if (url.includes('good')) return { ok: true, text: async () => '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720,CODECS="avc1.4d401f"\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS="hvc1.2.4.L120",VIDEO-RANGE=PQ\nb.m3u8' };
         if (url.includes('sized') && opts.method === 'HEAD') return { ok: true, headers: { get: h => (h === 'content-length' ? '1500000000' : null) } };
+        if (url.includes('gone')) return { ok: false, status: 404 };
         return { ok: false, status: 403 };
     };
     const hls = await provider(async () => [
-        { name: 'X', title: 'voe.sx', url: 'https://cdn/good/master.m3u8', quality: 'auto' },
-        { name: 'X', title: 'voe.sx', url: 'https://cdn/bad/master.m3u8', quality: 'auto' },
-        { name: 'X', title: 'voe.sx', url: 'https://cdn/sized.mp4', quality: 'auto' },
-        { name: 'X', title: 'voe.sx', url: 'https://cdn/x.mp4', quality: '720p' },
+        { name: 'X', title: 'a.com', url: 'https://cdn/good/master.m3u8', quality: 'auto' },
+        { name: 'X', title: 'b.com', url: 'https://cdn/bad/master.m3u8', quality: 'auto' },
+        { name: 'X', title: 'c.com', url: 'https://cdn/sized.mp4', quality: 'auto' },
+        { name: 'X', title: 'd.com', url: 'https://cdn/x.mp4', quality: '720p' },
+        { name: 'X', title: 'e.com', url: 'https://cdn/gone/master.m3u8', quality: 'auto' },
     ]).getStreams('1', 'movie');
-    assert.deepStrictEqual(hls.map(s => s.quality), ['1080p', 'HLS', 'MP4', '720p']);
-    assert.deepStrictEqual(hls.map(s => s.title), ['voe.sx · H.265 · 6,0 Mbit/s · HDR10', 'voe.sx', 'voe.sx · 1,5 GB', 'voe.sx']);
+    assert.deepStrictEqual(hls.map(x => x.quality), ['1080p', '720p', 'HLS', 'MP4']);
+    assert.deepStrictEqual(hls.map(x => x.title), ['a.com · H.265 · 6,0 Mbit/s · HDR10', 'd.com', 'b.com', 'c.com · 1,5 GB']);
+    // the only stream is gone: better to show it than an empty list
+    assert.strictEqual((await provider(async () => [{ name: 'X', title: 'e.com', url: 'https://cdn/gone/master.m3u8', quality: 'auto' }]).getStreams('1', 'movie')).length, 1);
 
     // Dood only ever answers with a Cloudflare challenge, so it must not cost a request
     let asked = 0;

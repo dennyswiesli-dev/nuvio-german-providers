@@ -1,4 +1,4 @@
-import { getJson, getText, provider } from '../../shared/http.js';
+import { getJson, getText, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { pickBest } from '../../shared/match.js';
 import { resolveEmbed } from '../../shared/extractors/index.js';
@@ -28,7 +28,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             : (await api(`titles/${hit.id}?loader=titlePage`)).title.videos;
         // "Premium (No Ads)" links serve the master playlist but 403 every variant without a premium login
         const full = (videos || []).filter(v => v.src && /^full$/i.test(v.category || '') && !/premium/i.test(v.name || ''));
-        const lists = await Promise.all(full.map(async v => {
+        return gather(full, async v => {
             const lang = (v.language || 'de').toUpperCase();
             // "stream" entries are the site's own direct HLS/MP4 links; everything else is a hoster embed
             const links = v.type === 'stream'
@@ -41,8 +41,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                 quality: (`${s.quality} ${v.quality}`.match(/\d{3,4}p/) || ['auto'])[0],
                 headers: s.headers,
             }));
-        }));
-        return [].concat(...lists);
+        });
     } catch (e) {
         console.error(`[Moflix] ${e.message}`);
     }
