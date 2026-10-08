@@ -584,7 +584,9 @@ function followRedirect(url, referer, cookie) {
     if (res.url && res.url !== url) return res.url;
     const type = (res.headers && res.headers.get("content-type") || "").split(";")[0];
     console.error(`[redirect] HTTP ${res.status} ${type || "no content-type"} stayed on ${url.replace(/^https?:\/\/[^/]+/, "")}${cookie ? "" : " (no cookie)"}`);
-    return null;
+    const gate = new Error("redirect gate: the site wants a browser check (captcha) for this IP");
+    gate.gate = true;
+    throw gate;
   });
 }
 function pickSeries(items, meta, base) {

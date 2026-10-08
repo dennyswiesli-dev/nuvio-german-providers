@@ -572,7 +572,9 @@ function followRedirect(url, referer, cookie) {
     if (res.url && res.url !== url) return res.url;
     const type = (res.headers && res.headers.get("content-type") || "").split(";")[0];
     console.error(`[redirect] HTTP ${res.status} ${type || "no content-type"} stayed on ${url.replace(/^https?:\/\/[^/]+/, "")}${cookie ? "" : " (no cookie)"}`);
-    return null;
+    const gate = new Error("redirect gate: the site wants a browser check (captcha) for this IP");
+    gate.gate = true;
+    throw gate;
   });
 }
 var cookieHeader = (setCookie) => String(setCookie || "").split(/,(?=\s*[\w.-]+=)/).map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
@@ -648,10 +650,15 @@ function getStreams(tmdbId, mediaType, season, episode) {
       const { epUrl, links, cookie } = page;
       if (!links.length) console.error(`[Serienstream] no hoster links on ${epUrl}`);
       let redirected = 0;
-      for (const langId of ["1", "3", "2"]) {
+      let gated = false;
+      languages: for (const langId of ["1", "3", "2"]) {
         const streams = [];
         for (const l of links.filter((l2) => l2.langId === langId)) {
-          const embed = yield followRedirect(BASE + l.url, epUrl, cookie).catch(() => null);
+          const embed = yield followRedirect(BASE + l.url, epUrl, cookie).catch((e) => {
+            gated = gated || e.gate === true;
+            return null;
+          });
+          if (gated) break languages;
           if (embed) redirected++;
           (yield resolveEmbed(embed, epUrl)).forEach((s) => streams.push({
             name: "Serienstream",
@@ -664,7 +671,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
         }
         if (streams.length) return streams;
       }
-      if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);
+      if (gated) console.error("[Serienstream] s.to wants a browser check (Turnstile captcha) for this IP before it releases hoster links; a different IP (e.g. mobile data) gets plain redirects");
+      else if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream`);
     } catch (e) {
       console.error(`[Serienstream] ${e.message}`);
     }

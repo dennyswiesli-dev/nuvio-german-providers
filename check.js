@@ -146,5 +146,8 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     assert.strictEqual(m1.imdbId, 'tt0773262');
     await getMeta('1405', 'tv');
     assert.strictEqual(tmdbCalls, 2, 'cached');
+    // s.to's "frameBridge" page: no redirect means a browser check is wanted, which a plugin cannot pass
+    globalThis.fetch = async url => ({ ok: true, status: 200, url, headers: { get: () => 'text/html; charset=utf-8' } });
+    await assert.rejects(followRedirect('https://s.example/r/1', 'https://s.example/ep', 'a=1'), e => e.gate === true);
     console.log('check ok');
 })();

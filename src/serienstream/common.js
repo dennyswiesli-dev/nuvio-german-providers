@@ -9,10 +9,14 @@ export async function followRedirect(url, referer, cookie) {
     if (cookie) headers.Cookie = cookie;
     const res = await send(url, { headers });
     if (res.url && res.url !== url) return res.url;
-    // no redirect: s.to answers with its captcha page instead (the body is not read, see send() in http.js)
+    // No redirect: for some IPs s.to answers with a small "frameBridge" page instead. Its parent page then asks the visitor
+    // for a Cloudflare Turnstile and ALTCHA check before the hoster link is released (data-redirect-gate-tier), which only
+    // a browser with a person in front of it can pass. The body is not read, see send() in http.js.
     const type = ((res.headers && res.headers.get('content-type')) || '').split(';')[0];
     console.error(`[redirect] HTTP ${res.status} ${type || 'no content-type'} stayed on ${url.replace(/^https?:\/\/[^/]+/, '')}${cookie ? '' : ' (no cookie)'}`);
-    return null;
+    const gate = new Error('redirect gate: the site wants a browser check (captcha) for this IP');
+    gate.gate = true;
+    throw gate;
 }
 
 // "a=1; Path=/, b=2; Expires=Wed, 01 Jan 2030 ..." -> "a=1; b=2"
