@@ -35,6 +35,9 @@ export function flagLabel(lang) {
 // German, so a file name that says "subbed" beats a title that only says German.
 export const fileNames = {};
 
+// 0 = German dub, 1 = German subtitles, 2 = everything else
+const tierOf = lang => (lang === 'Deutsch' ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2);
+
 function decorate(s) {
     const hit = LANGS.find(([re]) => re.test(s.title || ''));
     let lang = hit ? hit[1] : 'Deutsch', title = s.title;
@@ -48,7 +51,8 @@ function decorate(s) {
     const host = ((s.title || '').split(' · ')[0].match(/^[\w-]+\.[a-z]{2,}$/) || [])[0];
     const tags = releaseTags(fileNames[s.url]);
     if (tags.length) title = [title].concat(tags).filter(Boolean).join(' · ');
-    return { lang, stream: Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(' · '), title, quality }) };
+    const stream = Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(' · '), title, quality });
+    return { lang, tier: tierOf(lang), host: host || (String(s.url).match(/^https?:\/\/([^/]+)/) || [])[1] || '', stream, bandwidth: 0, dead: false };
 }
 
 // Details for the stream list's second line (Nuvio TV shows `title`). Everything here never throws and only costs requests
@@ -86,7 +90,8 @@ async function playlistInfo(stream) {
         const res = await send(stream.url, { headers: Object.assign({ 'User-Agent': UA }, stream.headers) });
         if (!res.ok) {
             console.error(`[quality] playlist answered HTTP ${res.status}`);
-            return null;
+            // 404/410 mean the stream is gone; 403 and friends may only block this request, so those stay
+            return res.status === 404 || res.status === 410 ? { dead: true } : null;
         }
         const best = bestVariant(String(await res.text()));
         if (!best) console.error('[quality] playlist lists no variants');
@@ -101,34 +106,87 @@ async function playlistInfo(stream) {
 async function fileSize(stream) {
     try {
         const res = await send(stream.url, { method: 'HEAD', headers: Object.assign({ 'User-Agent': UA }, stream.headers) });
+        if (res.status === 404 || res.status === 410) return { dead: true };
         const bytes = res.ok && Number(res.headers.get('content-length'));
-        return bytes > 1e6 ? bytes : null;
+        return bytes > 1e6 ? { bytes } : null;
     } catch (e) {
         return null;
     }
 }
 
-async function addDetails(streams) {
-    const pending = streams.slice(0, 4).filter(s => /\.m3u8|\/hls|master/i.test(s.url) || /\.mp4(\?|$)/i.test(s.url) || s.quality === 'HLS' || s.quality === 'MP4');
+async function addDetails(list) {
+    const pending = list.slice(0, 6).filter(d => /\.m3u8|\/hls|master/i.test(d.stream.url) || /\.mp4(\?|$)/i.test(d.stream.url) || d.stream.quality === 'HLS' || d.stream.quality === 'MP4');
     if (!pending.length) return;
     if (deadline - Date.now() < 8000) {
         console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1000))}s of the time budget left`);
         return;
     }
-    await Promise.all(pending.map(async s => {
-        const add = [];
+    await Promise.all(pending.map(async d => {
+        const s = d.stream, add = [];
         if (s.quality === 'MP4' || (/\.mp4(\?|$)/i.test(s.url) && !/\.m3u8/i.test(s.url))) {
-            const bytes = await fileSize(s);
-            if (bytes) add.push(gigabytes(bytes));
+            const info = await fileSize(s);
+            if (info && info.dead) d.dead = true;
+            if (info && info.bytes) add.push(gigabytes(info.bytes));
         } else {
             const v = await playlistInfo(s);
             if (!v) return;
+            if (v.dead) {
+                d.dead = true;
+                return;
+            }
             if (v.height && s.quality === 'HLS') s.quality = `${v.height}p`;
+            d.bandwidth = v.bandwidth || 0;
             add.push(v.codec, v.bandwidth && mbit(v.bandwidth), v.hdr);
         }
         const extra = add.filter(t => t && !String(s.title || '').includes(t));
         if (extra.length) s.title = [s.title].concat(extra).filter(Boolean).join(' · ');
     }));
+}
+
+// ---- what the stream list shows ----
+// Nuvio lists every plugin in its own group, so these rules shape each plugin's own list. Each one falls back to
+// "show everything" instead of leaving the list empty.
+const MAX_STREAMS = 4;   // per plugin, best first
+const MIN_HEIGHT = 360;  // known resolutions up to this are dropped when anything better exists
+const CAM = /\b(hd-?cam|cam-?rip|cam|hd-?ts|tele-?sync|hd-?tc|tele-?cine)\b/i;
+
+const heightOf = d => Number((String(d.stream.quality).match(/(\d{3,4})p/) || [])[1]) || 0;
+const keepIfAny = (list, keep) => {
+    const kept = list.filter(keep);
+    return kept.length ? kept : list;
+};
+
+function shape(list) {
+    // camera recordings (labelled by the site, the hoster's file name or the quality)
+    list = keepIfAny(list, d => !CAM.test([d.stream.quality, fileNames[d.stream.url], String(d.stream.title || '').split(' · ').slice(1).join(' ')].join(' ')));
+    // only the best language that exists: German dub, else German subtitles, else everything
+    const best = Math.min(...list.map(d => d.tier));
+    list = list.filter(d => d.tier === best);
+    // gone streams (HTTP 404/410 on the playlist or file)
+    list = keepIfAny(list, d => !d.dead);
+    // one entry per hoster and language: the best resolution, then bitrate, else the first
+    const better = (a, b) => heightOf(a) - heightOf(b) || a.bandwidth - b.bandwidth;
+    const first = {};
+    list.forEach(d => {
+        const key = `${d.lang}|${d.host}`;
+        if (!first[key] || better(d, first[key]) > 0) first[key] = d;
+    });
+    list = list.filter(d => first[`${d.lang}|${d.host}`] === d);
+    list = keepIfAny(list, d => !(heightOf(d) > 0 && heightOf(d) <= MIN_HEIGHT));
+    // best first: known resolutions descending, unknown ones behind them
+    return list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d).slice(0, MAX_STREAMS);
+}
+
+// Runs worker over items a few at a time and stops starting new ones once enough streams are in: fewer requests,
+// quicker answers, and fewer links spent on sites that count them. Requests already running always finish.
+const BATCH = 3, ENOUGH = 6;
+export async function gather(items, worker, enough = ENOUGH) {
+    const out = [];
+    for (let i = 0; i < items.length && out.length < enough; i += BATCH) {
+        const parts = await Promise.all(items.slice(i, i + BATCH).map(item => Promise.resolve().then(() => worker(item)).catch(() => [])));
+        parts.forEach(p => out.push(...p));
+    }
+    return out;
 }
 
 export function provider(getStreams) {
@@ -144,12 +202,11 @@ export function provider(getStreams) {
                 console.error(e.message);
             }
             if (running) await new Promise(resolve => idle.push(resolve));
-            // German dub first, then German subtitles, then the rest; within a group the provider's own order stays
-            const rank = lang => (lang === 'Deutsch' ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2);
-            const sorted = streams.map(decorate).map((d, i) => [rank(d.lang), i, d.stream]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(d => d[2]);
-            await addDetails(sorted);
+            const list = streams.map(decorate);
+            if (!list.length) return [];
+            await addDetails(list);
             if (running) await new Promise(resolve => idle.push(resolve));
-            return sorted;
+            return shape(list).map(d => d.stream);
         },
     };
 }

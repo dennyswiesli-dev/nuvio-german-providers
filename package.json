@@ -1,6 +1,6 @@
 {
   "name": "nuvio-german-providers",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Deutsche Quellen für Nuvio, portiert von Bnyro/GermanProviders",
   "private": true,
   "scripts": {

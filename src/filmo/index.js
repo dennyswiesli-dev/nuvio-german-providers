@@ -1,4 +1,4 @@
-import { getText, request, UA, send, provider } from '../../shared/http.js';
+import { getText, request, UA, send, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { norm, pickBest } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
@@ -54,7 +54,7 @@ async function getStreams(tmdbId, mediaType) {
             const id = c.attr('data-movie-link-id') || c.attr('data-p');
             return seen[id] ? false : (seen[id] = true);
         });
-        const out = await Promise.all(chips.map(async chip => {
+        return gather(chips, async chip => {
             const label = chip.text().replace(/\s+/g, ' ').trim();
             try {
                 const embed = await embedUrl(chip.attr('data-p'), hit.cookies);
@@ -66,8 +66,7 @@ async function getStreams(tmdbId, mediaType) {
                 console.error(`[Filmo] ${label}: ${e.message}`);
                 return [];
             }
-        }));
-        return [].concat(...out);
+        });
     } catch (e) {
         console.error(`[Filmo] ${e.message}`);
     }

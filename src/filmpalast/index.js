@@ -1,4 +1,4 @@
-import { getText, provider } from '../../shared/http.js';
+import { getText, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { pickBest } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
@@ -32,14 +32,14 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             const a = $('a.iconPlay', ul).first();
             return { host: $('.hostName', ul).text().trim(), link: a.attr('data-player-url') || a.attr('href') };
         }).filter(m => /^https?:/.test(m.link || ''));
-        const streams = await Promise.all(mirrors.map(m => resolveEmbed(m.link, BASE + '/').then(r => r.map(s => ({
+        const streams = await gather(mirrors, m => resolveEmbed(m.link, BASE + '/').then(r => r.map(s => ({
             name: 'FilmPalast',
             title: `${s.host || m.host} · Deutsch${s.quality !== 'auto' ? ' · ' + s.quality : ''}`,
             url: s.url,
             quality: s.quality,
             headers: s.headers,
-        })))));
-        return [].concat(...streams);
+        }))));
+        return streams;
     } catch (e) {
         console.error(`[FilmPalast] ${e.message}`);
     }

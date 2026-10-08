@@ -57,6 +57,7 @@ function flagLabel(lang) {
   return FLAGS[lang] || lang;
 }
 var fileNames = {};
+var tierOf = (lang) => lang === "Deutsch" ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2;
 function decorate(s) {
   const hit = LANGS.find(([re]) => re.test(s.title || ""));
   let lang = hit ? hit[1] : "Deutsch", title2 = s.title;
@@ -69,7 +70,8 @@ function decorate(s) {
   const host = ((s.title || "").split(" \xB7 ")[0].match(/^[\w-]+\.[a-z]{2,}$/) || [])[0];
   const tags = releaseTags(fileNames[s.url]);
   if (tags.length) title2 = [title2].concat(tags).filter(Boolean).join(" \xB7 ");
-  return { lang, stream: Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(" \xB7 "), title: title2, quality }) };
+  const stream = Object.assign({}, s, { name: [s.name, flagLabel(lang), host].filter(Boolean).join(" \xB7 "), title: title2, quality });
+  return { lang, tier: tierOf(lang), host: host || (String(s.url).match(/^https?:\/\/([^/]+)/) || [])[1] || "", stream, bandwidth: 0, dead: false };
 }
 var CODECS = [[/hvc1|hev1|hevc|x265|h\.?265/i, "H.265"], [/avc1|x264|h\.?264/i, "H.264"], [/av01|\bav1\b/i, "AV1"], [/vp0?9/i, "VP9"]];
 var codecName = (text) => (CODECS.find(([re]) => re.test(text)) || [])[1];
@@ -99,7 +101,7 @@ function playlistInfo(stream) {
       const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
       if (!res.ok) {
         console.error(`[quality] playlist answered HTTP ${res.status}`);
-        return null;
+        return res.status === 404 || res.status === 410 ? { dead: true } : null;
       }
       const best = bestVariant(String(yield res.text()));
       if (!best) console.error("[quality] playlist lists no variants");
@@ -114,36 +116,66 @@ function fileSize(stream) {
   return __async(this, null, function* () {
     try {
       const res = yield send(stream.url, { method: "HEAD", headers: Object.assign({ "User-Agent": UA }, stream.headers) });
+      if (res.status === 404 || res.status === 410) return { dead: true };
       const bytes = res.ok && Number(res.headers.get("content-length"));
-      return bytes > 1e6 ? bytes : null;
+      return bytes > 1e6 ? { bytes } : null;
     } catch (e) {
       return null;
     }
   });
 }
-function addDetails(streams) {
+function addDetails(list) {
   return __async(this, null, function* () {
-    const pending = streams.slice(0, 4).filter((s) => /\.m3u8|\/hls|master/i.test(s.url) || /\.mp4(\?|$)/i.test(s.url) || s.quality === "HLS" || s.quality === "MP4");
+    const pending = list.slice(0, 6).filter((d) => /\.m3u8|\/hls|master/i.test(d.stream.url) || /\.mp4(\?|$)/i.test(d.stream.url) || d.stream.quality === "HLS" || d.stream.quality === "MP4");
     if (!pending.length) return;
     if (deadline - Date.now() < 8e3) {
       console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);
       return;
     }
-    yield Promise.all(pending.map((s) => __async(null, null, function* () {
-      const add = [];
+    yield Promise.all(pending.map((d) => __async(null, null, function* () {
+      const s = d.stream, add = [];
       if (s.quality === "MP4" || /\.mp4(\?|$)/i.test(s.url) && !/\.m3u8/i.test(s.url)) {
-        const bytes = yield fileSize(s);
-        if (bytes) add.push(gigabytes(bytes));
+        const info = yield fileSize(s);
+        if (info && info.dead) d.dead = true;
+        if (info && info.bytes) add.push(gigabytes(info.bytes));
       } else {
         const v = yield playlistInfo(s);
         if (!v) return;
+        if (v.dead) {
+          d.dead = true;
+          return;
+        }
         if (v.height && s.quality === "HLS") s.quality = `${v.height}p`;
+        d.bandwidth = v.bandwidth || 0;
         add.push(v.codec, v.bandwidth && mbit(v.bandwidth), v.hdr);
       }
       const extra = add.filter((t) => t && !String(s.title || "").includes(t));
       if (extra.length) s.title = [s.title].concat(extra).filter(Boolean).join(" \xB7 ");
     })));
   });
+}
+var MAX_STREAMS = 4;
+var MIN_HEIGHT = 360;
+var CAM = /\b(hd-?cam|cam-?rip|cam|hd-?ts|tele-?sync|hd-?tc|tele-?cine)\b/i;
+var heightOf = (d) => Number((String(d.stream.quality).match(/(\d{3,4})p/) || [])[1]) || 0;
+var keepIfAny = (list, keep) => {
+  const kept = list.filter(keep);
+  return kept.length ? kept : list;
+};
+function shape(list) {
+  list = keepIfAny(list, (d) => !CAM.test([d.stream.quality, fileNames[d.stream.url], String(d.stream.title || "").split(" \xB7 ").slice(1).join(" ")].join(" ")));
+  const best = Math.min(...list.map((d) => d.tier));
+  list = list.filter((d) => d.tier === best);
+  list = keepIfAny(list, (d) => !d.dead);
+  const better = (a, b) => heightOf(a) - heightOf(b) || a.bandwidth - b.bandwidth;
+  const first = {};
+  list.forEach((d) => {
+    const key = `${d.lang}|${d.host}`;
+    if (!first[key] || better(d, first[key]) > 0) first[key] = d;
+  });
+  list = list.filter((d) => first[`${d.lang}|${d.host}`] === d);
+  list = keepIfAny(list, (d) => !(heightOf(d) > 0 && heightOf(d) <= MIN_HEIGHT));
+  return list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d).slice(0, MAX_STREAMS);
 }
 function provider(getStreams2) {
   return {
@@ -158,11 +190,11 @@ function provider(getStreams2) {
           console.error(e.message);
         }
         if (running) yield new Promise((resolve) => idle.push(resolve));
-        const rank = (lang) => lang === "Deutsch" ? 0 : /dt\. UT|OmU/.test(lang) ? 1 : 2;
-        const sorted = streams.map(decorate).map((d, i) => [rank(d.lang), i, d.stream]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((d) => d[2]);
-        yield addDetails(sorted);
+        const list = streams.map(decorate);
+        if (!list.length) return [];
+        yield addDetails(list);
         if (running) yield new Promise((resolve) => idle.push(resolve));
-        return sorted;
+        return shape(list).map((d) => d.stream);
       });
     }
   };
