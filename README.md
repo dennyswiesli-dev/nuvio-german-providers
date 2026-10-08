@@ -62,13 +62,13 @@ Nuvio listet jedes Plugin als eigene Gruppe. Innerhalb eines Plugins gelten dies
 
 - **Nur Deutsch:** deutsche Synchro; gibt es keine, deutsche Untertitel; gibt es auch die nicht, zeigt das Plugin für diesen Titel nichts (Englisch, Französisch usw. gehören zu anderen Addons).
 - **Keine Kinomitschnitte:** Streams, die als CAM, TS oder Telesync gekennzeichnet sind, fallen weg.
-- **Tote Streams raus:** Meldet die Playlist oder Datei HTTP 404/410, fällt der Stream weg. Bei 403 bleibt er, weil dann nur unsere Anfrage gesperrt sein kann.
+- **Tote Streams raus:** Meldet die Playlist oder Datei eines Streams mit noch unbekannter Auflösung HTTP 404/410, fällt er weg. Bei 403 bleibt er, weil dann nur unsere Anfrage gesperrt sein kann.
 - **Ein Eintrag pro Hoster und Sprache:** der mit der besten Auflösung (dann Bitrate).
 - **Über 360p:** Bekannte Auflösungen bis 360p fallen weg, solange es etwas Besseres gibt.
 - **Beste zuerst, höchstens vier:** nach Auflösung absteigend, unbekannte dahinter.
-- **Früher aufhören:** Hoster werden zu dritt aufgelöst; sind sechs Streams da, startet kein weiterer Abruf. Das spart Zeit und Links bei Seiten, die sie zählen (s.to). Zuerst kommen die deutschen und innerhalb davon die zuverlässigeren Hoster (VOE, Vidsonic/Vidara, dann Vidhide, Streamwish und andere, zuletzt Dood). Die Reihenfolge ist eine Schätzung (`PREFERRED` in `shared/extractors/index.js`).
+- **Früher aufhören:** Hoster werden zu fünft aufgelöst; sind sechs Streams da, startet kein weiterer Abruf. Das spart Zeit und Links bei Seiten, die sie zählen (s.to). Zuerst kommen die deutschen und innerhalb davon die zuverlässigeren Hoster (VOE, Vidsonic/Vidara, dann Vidhide, Streamwish und andere, zuletzt Dood). Die Reihenfolge ist eine Schätzung (`PREFERRED` in `shared/extractors/index.js`).
 
-Die Titelzeile (Nuvio TV) nennt zusätzlich Codec, Bitrate, HDR, Dateigröße und Release-Tags, soweit bekannt. Die Grenzen (`MAX_STREAMS`, `MIN_HEIGHT`) stehen oben im Abschnitt „what the stream list shows" in `shared/http.js`.
+Die Titelzeile (Nuvio TV) nennt zusätzlich Codec, Bitrate, HDR, Dateigröße und Release-Tags, soweit bekannt. Dafür gibt es nur bei Streams mit noch unbekannter Auflösung (`HLS`/`MP4`) eine Zusatzanfrage, höchstens vier, mit 3 Sekunden Zeitlimit. Die Grenzen (`MAX_STREAMS`, `MIN_HEIGHT`) stehen oben im Abschnitt „what the stream list shows" in `shared/http.js`.
 
 ## Entwicklung
 
