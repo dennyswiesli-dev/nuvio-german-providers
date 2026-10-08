@@ -95,7 +95,7 @@ function bestVariant(text) {
   }
   return best;
 }
-var DETAIL_TIMEOUT_MS = 5e3;
+var DETAIL_TIMEOUT_MS = 3e3;
 function timed(url, opts, readBody) {
   return __async(this, null, function* () {
     if (typeof AbortController === "undefined" || typeof setTimeout !== "function") {
@@ -143,7 +143,7 @@ function fileSize(stream) {
 }
 function addDetails(list) {
   return __async(this, null, function* () {
-    const pending = list.slice(0, 6).filter((d) => /\.m3u8|\/hls|master/i.test(d.stream.url) || /\.mp4(\?|$)/i.test(d.stream.url) || d.stream.quality === "HLS" || d.stream.quality === "MP4");
+    const pending = list.slice(0, 4).filter((d) => d.stream.quality === "HLS" || d.stream.quality === "MP4");
     if (!pending.length) return;
     if (deadline - Date.now() < 8e3) {
       console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);

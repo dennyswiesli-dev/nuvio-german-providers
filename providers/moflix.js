@@ -95,7 +95,7 @@ function bestVariant(text) {
   }
   return best;
 }
-var DETAIL_TIMEOUT_MS = 5e3;
+var DETAIL_TIMEOUT_MS = 3e3;
 function timed(url, opts, readBody) {
   return __async(this, null, function* () {
     if (typeof AbortController === "undefined" || typeof setTimeout !== "function") {
@@ -143,7 +143,7 @@ function fileSize(stream) {
 }
 function addDetails(list) {
   return __async(this, null, function* () {
-    const pending = list.slice(0, 6).filter((d) => /\.m3u8|\/hls|master/i.test(d.stream.url) || /\.mp4(\?|$)/i.test(d.stream.url) || d.stream.quality === "HLS" || d.stream.quality === "MP4");
+    const pending = list.slice(0, 4).filter((d) => d.stream.quality === "HLS" || d.stream.quality === "MP4");
     if (!pending.length) return;
     if (deadline - Date.now() < 8e3) {
       console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1e3))}s of the time budget left`);
@@ -195,7 +195,7 @@ function shape(list) {
   list = keepIfAny(list, (d) => !(heightOf(d) > 0 && heightOf(d) <= MIN_HEIGHT));
   return list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d).slice(0, MAX_STREAMS);
 }
-var BATCH = 3;
+var BATCH = 5;
 var ENOUGH = 6;
 var isGerman = (text) => /deutsch|german|\bde\b|\bger\b/i.test(text || "") && !/sub|untertitel|\but\b/i.test(text || "");
 var germanFirst = (items, text) => items.map((x, i) => [x, i]).sort(([a, i], [b, j]) => isGerman(text(a)) ? isGerman(text(b)) ? i - j : -1 : isGerman(text(b)) ? 1 : i - j).map(([x]) => x);

@@ -61,8 +61,11 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     // stop starting requests once enough streams are in
     const started = [];
     const got = await gather([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], async n => { started.push(n); return [n]; });
-    assert.deepStrictEqual(started, [1, 2, 3, 4, 5, 6]);
-    assert.strictEqual(got.length, 6);
+    assert.deepStrictEqual(started, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    assert.strictEqual(got.length, 10);
+    const few = [];
+    await gather([1, 2, 3, 4, 5, 6, 7, 8], async n => { few.push(n); return [n, n]; });
+    assert.deepStrictEqual(few, [1, 2, 3, 4, 5], 'five at a time, then enough streams are in');
     assert.deepStrictEqual(await gather([1, 2], async n => { if (n === 1) throw new Error('x'); return [n]; }), [2]);
 
     // "HLS" becomes the best resolution of the master playlist, codec/bitrate/HDR join the title, MP4 gets its size from a HEAD

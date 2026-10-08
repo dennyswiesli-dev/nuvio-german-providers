@@ -87,7 +87,7 @@ function bestVariant(text) {
 
 // The details are optional, so a slow host must not hold the stream list up: abort after DETAIL_TIMEOUT_MS where the
 // runtime can (AbortController and timers); elsewhere the request just runs as before.
-const DETAIL_TIMEOUT_MS = 5000;
+const DETAIL_TIMEOUT_MS = 3000;
 async function timed(url, opts, readBody) {
     if (typeof AbortController === 'undefined' || typeof setTimeout !== 'function') {
         const res = await send(url, opts);
@@ -133,7 +133,8 @@ async function fileSize(stream) {
 }
 
 async function addDetails(list) {
-    const pending = list.slice(0, 6).filter(d => /\.m3u8|\/hls|master/i.test(d.stream.url) || /\.mp4(\?|$)/i.test(d.stream.url) || d.stream.quality === 'HLS' || d.stream.quality === 'MP4');
+    // only streams whose resolution is still unknown cost an extra request ('HLS'/'MP4' are the labels for "unknown")
+    const pending = list.slice(0, 4).filter(d => d.stream.quality === 'HLS' || d.stream.quality === 'MP4');
     if (!pending.length) return;
     if (deadline - Date.now() < 8000) {
         console.error(`[quality] skipped, only ${Math.max(0, Math.round((deadline - Date.now()) / 1000))}s of the time budget left`);
@@ -198,7 +199,7 @@ function shape(list) {
 
 // Runs worker over items a few at a time and stops starting new ones once enough streams are in: fewer requests,
 // quicker answers, and fewer links spent on sites that count them. Requests already running always finish.
-const BATCH = 3, ENOUGH = 6;
+const BATCH = 5, ENOUGH = 6;
 
 // Sites list hosters in any language order. German ones go first, or the early stop below could skip them.
 const isGerman = text => /deutsch|german|\bde\b|\bger\b/i.test(text || '') && !/sub|untertitel|\but\b/i.test(text || '');
