@@ -95,15 +95,32 @@ function bestVariant(text) {
   }
   return best;
 }
+var DETAIL_TIMEOUT_MS = 5e3;
+function timed(url, opts, readBody) {
+  return __async(this, null, function* () {
+    if (typeof AbortController === "undefined" || typeof setTimeout !== "function") {
+      const res = yield send(url, opts);
+      return { res, text: readBody && res.ok ? yield res.text() : "" };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
+    try {
+      const res = yield send(url, Object.assign({}, opts, { signal: controller.signal }));
+      return { res, text: readBody && res.ok ? yield res.text() : "" };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
 function playlistInfo(stream) {
   return __async(this, null, function* () {
     try {
-      const res = yield send(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) });
+      const { res, text } = yield timed(stream.url, { headers: Object.assign({ "User-Agent": UA }, stream.headers) }, true);
       if (!res.ok) {
         console.error(`[quality] playlist answered HTTP ${res.status}`);
         return res.status === 404 || res.status === 410 ? { dead: true } : null;
       }
-      const best = bestVariant(String(yield res.text()));
+      const best = bestVariant(String(text));
       if (!best) console.error("[quality] playlist lists no variants");
       return best;
     } catch (e) {
@@ -115,7 +132,7 @@ function playlistInfo(stream) {
 function fileSize(stream) {
   return __async(this, null, function* () {
     try {
-      const res = yield send(stream.url, { method: "HEAD", headers: Object.assign({ "User-Agent": UA }, stream.headers) });
+      const { res } = yield timed(stream.url, { method: "HEAD", headers: Object.assign({ "User-Agent": UA }, stream.headers) }, false);
       if (res.status === 404 || res.status === 410) return { dead: true };
       const bytes = res.ok && Number(res.headers.get("content-length"));
       return bytes > 1e6 ? { bytes } : null;

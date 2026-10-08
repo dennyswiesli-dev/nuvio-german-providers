@@ -51,8 +51,14 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     // nothing better than 360p: show it anyway
     assert.strictEqual((await provider(async () => [q('a.com', '360p'), q('b.com', '240p')]).getStreams('1', 'movie')).length, 2);
 
+    // German hosters first, otherwise the early stop could skip them (English ones listed before the German one)
+    const { germanFirst, gather } = require('./node_modules/.cache/check/http.js');
+    assert.deepStrictEqual(germanFirst(['Englisch', 'Deutsch Sub', 'de', 'Deutsch', 'fr'], t => t), ['de', 'Deutsch', 'Englisch', 'Deutsch Sub', 'fr']);
+    const late = [...Array(5)].map((_, i) => ({ lang: 'Englisch', n: i })).concat({ lang: 'Deutsch', n: 9 });
+    const pickedGerman = await provider(async () => gather(germanFirst(late, v => v.lang), async v => [1, 2].map(k => ({ name: 'M', title: `h${v.n}${k}.com · ${v.lang}`, url: `https://h${v.n}${k}.com/v.mp4`, quality: '720p' })))).getStreams('1', 'movie');
+    assert.deepStrictEqual(pickedGerman.map(x => x.name), ['M · 🇩🇪 · h91.com', 'M · 🇩🇪 · h92.com']);
+
     // stop starting requests once enough streams are in
-    const { gather } = require('./node_modules/.cache/check/http.js');
     const started = [];
     const got = await gather([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], async n => { started.push(n); return [n]; });
     assert.deepStrictEqual(started, [1, 2, 3, 4, 5, 6]);
@@ -76,7 +82,14 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     ]).getStreams('1', 'movie');
     assert.deepStrictEqual(hls.map(x => x.quality), ['1080p', '720p', 'HLS', 'MP4']);
     assert.deepStrictEqual(hls.map(x => x.title), ['a.com · H.265 · 6,0 Mbit/s · HDR10', 'd.com', 'b.com', 'c.com · 1,5 GB']);
+    // a host that never answers must not hold the list up: the details request is aborted, the stream stays
+    globalThis.fetch = (url, opts = {}) => new Promise((resolve, reject) => opts.signal && opts.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    const t0 = Date.now();
+    const slow = await provider(async () => [{ name: 'X', title: 'a.com', url: 'https://cdn/slow/master.m3u8', quality: 'auto' }]).getStreams('1', 'movie');
+    assert.deepStrictEqual(slow.map(x => x.quality), ['HLS']);
+    assert.ok(Date.now() - t0 < 8000, 'a hanging playlist held the list up');
     // the only stream is gone: better to show it than an empty list
+    globalThis.fetch = async (url, opts = {}) => (url.includes('gone') ? { ok: false, status: 404 } : { ok: false, status: 403 });
     assert.strictEqual((await provider(async () => [{ name: 'X', title: 'e.com', url: 'https://cdn/gone/master.m3u8', quality: 'auto' }]).getStreams('1', 'movie')).length, 1);
 
     // Dood only ever answers with a Cloudflare challenge, so it must not cost a request
