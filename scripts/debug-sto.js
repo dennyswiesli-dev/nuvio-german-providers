@@ -28,6 +28,9 @@ async function show(label, url, opts) {
         console.log(`location: ${res.headers.get('location')}, set-cookie names: ${String(res.headers.get('set-cookie') || '').split(/,(?=\s*[\w.-]+=)/).map(c => c.split('=')[0].trim()).join(', ') || '-'}`);
         console.log(`title: ${$('title').text().trim()}`);
         console.log(`hints: ${hints(body).join(', ') || '-'}`);
+        console.log(`headers: ${[...res.headers.entries()].filter(([k]) => k !== 'set-cookie').map(([k, v]) => `${k}: ${v.slice(0, 80)}`).join(' | ')}`);
+        // a small interstitial page (like s.to's /r) is worth reading in full; long token strings are masked
+        if (body.length <= 4000) console.log(`--- full body ---\n${body.replace(/[A-Za-z0-9+/=_-]{80,}/g, '<token>')}\n--- end ---`);
         console.log(`text: ${$('body').text().replace(/\s+/g, ' ').trim().slice(0, 500)}`);
         const scripts = $('script').map((i, s) => $(s).html() || '').get().filter(s => /location|redirect|captcha|token/i.test(s));
         for (const s of scripts.slice(0, 2)) console.log(`script: ${s.replace(/\s+/g, ' ').slice(0, 400)}`);
@@ -53,5 +56,7 @@ async function show(label, url, opts) {
     await show('1 plugin style (UA + Referer)', url, { headers: { 'User-Agent': UA, Referer: epUrl } });
     await show('2 plugin style + cookie', url, { headers: { 'User-Agent': UA, Referer: epUrl, Cookie: cookie } });
     await show('3 browser headers + cookie', url, { headers: Object.assign({ Referer: epUrl, Cookie: cookie }, BROWSER) });
+    // the page checks window.top === window.self, so it is made for an iframe: ask like an iframe would
+    await show('5 iframe style', url, { headers: Object.assign({}, BROWSER, { Referer: epUrl, Cookie: cookie, 'Sec-Fetch-Dest': 'iframe', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'same-origin' }) });
     await show('4 manual redirect (see Location)', url, { redirect: 'manual', headers: Object.assign({ Referer: epUrl, Cookie: cookie }, BROWSER) });
 })();
