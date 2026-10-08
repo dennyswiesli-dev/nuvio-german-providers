@@ -41,6 +41,36 @@ async function show(label, url, opts) {
     }
 }
 
+// The /r page only posts its token to the parent window ({type: 'frameBridge'}); what the episode page then does with it
+// decides whether a plugin can do the same. Print the code around every "frameBridge" in the page and its scripts.
+async function findHandler(page, epUrl, cookie) {
+    console.log('\n=== frameBridge handler in the episode page and its scripts');
+    const sources = [{ name: 'episode page', text: page.body }];
+    const srcs = page.$('script[src]').map((i, s) => page.$(s).attr('src')).get().filter(Boolean).slice(0, 12);
+    for (const src of srcs) {
+        const u = new URL(src, epUrl).href;
+        try {
+            const r = await fetch(u, { headers: Object.assign({}, BROWSER, { Referer: epUrl, Cookie: cookie }) });
+            sources.push({ name: u.replace(/\?.*/, ''), text: await r.text() });
+        } catch (e) {
+            console.log(`failed ${u}: ${e.message}`);
+        }
+    }
+    console.log(`sources: ${sources.map(s => `${s.name} (${s.text.length} bytes)`).join(', ')}`);
+    const mask = t => t.replace(/[A-Za-z0-9+/=_-]{80,}/g, '<token>');
+    for (const [word, cap] of [['frameBridge', 4], ['turnstile', 2]]) {
+        let shown = 0;
+        for (const s of sources) {
+            for (const m of s.text.matchAll(new RegExp(word, 'g'))) {
+                if (shown >= cap) break;
+                shown++;
+                console.log(`--- "${word}" in ${s.name} at ${m.index}\n${mask(s.text.slice(Math.max(0, m.index - 1200), m.index + 1800))}\n---`);
+            }
+        }
+        if (!shown) console.log(`no "${word}" found`);
+    }
+}
+
 (async () => {
     const epUrl = `${BASE}${seriesPath}/staffel-${season}/episode-${episode}`;
     const page = await show('episode page', epUrl, { headers: BROWSER });
@@ -53,6 +83,7 @@ async function show(label, url, opts) {
     if (!links.length) return;
     const url = BASE + links[0].url;
     console.log(`first link: ${links[0].provider}/${links[0].lang} ${url.replace(/\?.*/, '?…')}`);
+    await findHandler(page, epUrl, cookie);
     await show('1 plugin style (UA + Referer)', url, { headers: { 'User-Agent': UA, Referer: epUrl } });
     await show('2 plugin style + cookie', url, { headers: { 'User-Agent': UA, Referer: epUrl, Cookie: cookie } });
     await show('3 browser headers + cookie', url, { headers: Object.assign({ Referer: epUrl, Cookie: cookie }, BROWSER) });
