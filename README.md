@@ -34,7 +34,7 @@ https://dw98-git.github.io/nuvio-german-providers/manifest.json
 | Netzkino | Filme | Suche der Netzkino-API ist lückenhaft |
 | FilmFrei24, Filmo, FlixiTV, KellerKino, Megakino, FilmPalast, HDFilme, Moflix, Huhu | Filme (teils Serien) | über Hoster wie VOE, Vidara, VidSonic, FireStream, MixDrop … |
 | KinoKing | Serien | Filme sind abgeschaltet: die Filmseite braucht 12–20 s pro Abruf |
-| Serienstream, Aniworld | Serien / Anime | s.to zeigt nach ~10 Links pro IP ein Captcha, dann fehlen weitere Links; hilft ein IP-Wechsel (z. B. Mobilfunk statt WLAN) |
+| Serienstream, Aniworld | Serien / Anime | s.to verlangt für manche IPs vor jedem Hoster-Link eine Browser-Prüfung (Cloudflare Turnstile); die kann ein Plugin nicht lösen, dann bleibt die Liste leer. Hilft ein IP-Wechsel (z. B. Mobilfunk statt WLAN) |
 
 
 
@@ -50,7 +50,7 @@ Einige Seiten lassen Rechenzentren und manche Heimanschlüsse nicht herein. Das 
 |---|---|---|
 | KellerKino | Cloudflare antwortet mit HTTP 403 | andere IP (z. B. Mobilfunk) |
 | South Park | Cloudflare-Prüfung statt Inhalt | andere IP |
-| Serienstream | s.to leitet die Hoster-Links auf ein Captcha um, oft schon beim ersten Link | andere IP; das Plugin öffnet nur so viele Links wie nötig |
+| Serienstream | s.to verlangt für manche IPs eine Browser-Prüfung (Cloudflare Turnstile und ALTCHA, `data-redirect-gate-tier`), bevor es den Hoster-Link freigibt. Das Plugin erkennt das, bricht nach dem ersten Link ab und zeigt nichts | andere IP (Mobilfunk geht) |
 | KinoKing | antwortet von manchen IPs gar nicht oder sehr langsam | andere IP |
 | FilmPalast | der Hoster `vinovo.to` liefert HTTP 403, der Rest geht | – (`Debug hoster`-Workflow, siehe unten) |
 

@@ -47,10 +47,16 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         // s.to shows a captcha instead of redirecting after ~10 links per IP, so spend links on German first
         // (1 = Deutsch, 3 = Ger-Sub, 2 = Englisch), one after the other, and stop as soon as two streams are in
         // (one VOE link already gives HLS and MP4); only fall back to the next language if nothing played
-        for (const langId of ['1', '3', '2']) {
+        let gated = false;
+        languages: for (const langId of ['1', '3', '2']) {
             const streams = [];
             for (const l of links.filter(l => l.langId === langId)) {
-                const embed = await followRedirect(BASE + l.url, epUrl, cookie).catch(() => null);
+                const embed = await followRedirect(BASE + l.url, epUrl, cookie).catch(e => {
+                    gated = gated || e.gate === true;
+                    return null;
+                });
+                // every further link would get the same browser check: stop instead of burning links and time
+                if (gated) break languages;
                 if (embed) redirected++;
                 (await resolveEmbed(embed, epUrl)).forEach(s => streams.push({
                     name: 'Serienstream', title: `${s.host} · ${l.lang}`, url: s.url, quality: s.quality, headers: s.headers,
@@ -59,7 +65,8 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             }
             if (streams.length) return streams;
         }
-        if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream (captcha instead of redirect?)`);
+        if (gated) console.error('[Serienstream] s.to wants a browser check (Turnstile captcha) for this IP before it releases hoster links; a different IP (e.g. mobile data) gets plain redirects');
+        else if (links.length) console.error(`[Serienstream] ${links.length} links, ${redirected} redirected to a hoster, no stream`);
     } catch (e) {
         console.error(`[Serienstream] ${e.message}`);
     }
