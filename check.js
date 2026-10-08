@@ -48,6 +48,9 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     // best resolution first, one entry per hoster, 360p and below dropped, at most four, unknown resolutions last
     const mix = await provider(async () => [q('a.com', '360p'), q('b.com', '1080p'), q('c.com', '480p'), q('c.com', '720p'), q('d.com', '480p'), q('e.com', 'auto'), q('f.com', '1080p')]).getStreams('1', 'movie');
     assert.deepStrictEqual(mix.map(x => `${x.title.split(' · ')[0]} ${x.quality}`), ['b.com 1080p', 'f.com 1080p', 'c.com 720p', 'd.com 480p']);
+    // a lighter variant of the same hoster survives next to the Full HD one, even when the cap would cut it
+    const lite = await provider(async () => [q('m.com', '1080p', 'https://m/1'), q('m.com', '720p', 'https://m/2'), q('b.com', '1080p'), q('c.com', '1080p'), q('d.com', '1080p'), q('e.com', '1080p')]).getStreams('1', 'movie');
+    assert.ok(lite.length <= 4 && lite.some(x => x.quality === '720p'));
     // nothing better than 360p: show it anyway
     assert.strictEqual((await provider(async () => [q('a.com', '360p'), q('b.com', '240p')]).getStreams('1', 'movie')).length, 2);
 
