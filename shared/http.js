@@ -163,7 +163,7 @@ async function addDetails(list) {
 
 // ---- what the stream list shows ----
 // Nuvio lists every plugin in its own group, so these rules shape each plugin's own list. Each one falls back to
-// "show everything" instead of leaving the list empty.
+// "show everything" instead of leaving the list empty (except the language rule: no German, no streams).
 const MAX_STREAMS = 4;   // per plugin, best first
 const MIN_HEIGHT = 360;  // known resolutions up to this are dropped when anything better exists
 const CAM = /\b(hd-?cam|cam-?rip|cam|hd-?ts|tele-?sync|hd-?tc|tele-?cine)\b/i;
@@ -177,8 +177,9 @@ const keepIfAny = (list, keep) => {
 function shape(list) {
     // camera recordings (labelled by the site, the hoster's file name or the quality)
     list = keepIfAny(list, d => !CAM.test([d.stream.quality, fileNames[d.stream.url], String(d.stream.title || '').split(' · ').slice(1).join(' ')].join(' ')));
-    // only the best language that exists: German dub, else German subtitles, else everything
+    // only the best language that exists: German dub, else German subtitles. A plugin with nothing German shows nothing.
     const best = Math.min(...list.map(d => d.tier));
+    if (best > 1) return [];
     list = list.filter(d => d.tier === best);
     // gone streams (HTTP 404/410 on the playlist or file)
     list = keepIfAny(list, d => !d.dead);

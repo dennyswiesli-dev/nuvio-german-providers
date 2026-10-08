@@ -182,6 +182,7 @@ var keepIfAny = (list, keep) => {
 function shape(list) {
   list = keepIfAny(list, (d) => !CAM.test([d.stream.quality, fileNames[d.stream.url], String(d.stream.title || "").split(" \xB7 ").slice(1).join(" ")].join(" ")));
   const best = Math.min(...list.map((d) => d.tier));
+  if (best > 1) return [];
   list = list.filter((d) => d.tier === best);
   list = keepIfAny(list, (d) => !d.dead);
   const better = (a, b) => heightOf(a) - heightOf(b) || a.bandwidth - b.bandwidth;

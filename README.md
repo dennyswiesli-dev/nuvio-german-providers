@@ -58,9 +58,9 @@ Einen Hoster, den die Plugins nicht lesen können, zeigt der Workflow **Debug ho
 
 ## Was die Streamliste zeigt
 
-Nuvio listet jedes Plugin als eigene Gruppe. Innerhalb eines Plugins gelten diese Regeln (`provider()` in `shared/http.js`), jede mit Rückfall auf „alles zeigen", damit die Liste nie leer wird:
+Nuvio listet jedes Plugin als eigene Gruppe. Innerhalb eines Plugins gelten diese Regeln (`provider()` in `shared/http.js`), bis auf die Sprachregel jeweils mit Rückfall auf „alles zeigen", damit die Liste nicht unnötig leer wird:
 
-- **Nur die beste Sprache:** deutsche Synchro; gibt es keine, deutsche Untertitel; gibt es auch die nicht, alles.
+- **Nur Deutsch:** deutsche Synchro; gibt es keine, deutsche Untertitel; gibt es auch die nicht, zeigt das Plugin für diesen Titel nichts (Englisch, Französisch usw. gehören zu anderen Addons).
 - **Keine Kinomitschnitte:** Streams, die als CAM, TS oder Telesync gekennzeichnet sind, fallen weg.
 - **Tote Streams raus:** Meldet die Playlist oder Datei HTTP 404/410, fällt der Stream weg. Bei 403 bleibt er, weil dann nur unsere Anfrage gesperrt sein kann.
 - **Ein Eintrag pro Hoster und Sprache:** der mit der besten Auflösung (dann Bitrate).

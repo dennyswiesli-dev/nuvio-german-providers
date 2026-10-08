@@ -23,7 +23,7 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     assert.deepStrictEqual(streams, []);
     assert.ok(finished, 'getStreams answered while a request was still running');
 
-    // only the best language that exists: German dub, else German subtitles, else everything; huhu.to files "…GerSub…" under plain German
+    // only the best language that exists: German dub, else German subtitles, else nothing; huhu.to files "…GerSub…" under plain German
     globalThis.fetch = async () => ({ ok: false, status: 405 });
     const { fileNames } = require('./node_modules/.cache/check/http.js');
     const names = async (list) => (await provider(async () => list).getStreams('1', 'tv', 1, 1)).map(s => s.name);
@@ -34,8 +34,8 @@ assert.deepStrictEqual(jwplayer('sources: [{file:"/v.mp4",label:"720p"}]', 'http
     // the file name outranks a title that only says German: that "DE" file is subtitled, so it is no dub
     assert.deepStrictEqual(await names([s('voe.sx · DE', 'https://v/gersub'), s('mixdrop.ps · Englisch', 'https://v/4'), s('vidoza.net · Japanisch, dt. UT', 'https://v/5')]),
         ['X · 🌐 UT 🇩🇪 · voe.sx', 'X · 🇯🇵 UT 🇩🇪 · vidoza.net']);
-    assert.deepStrictEqual(await names([s('mixdrop.ps · Englisch', 'https://v/6'), s('voe.sx · Französisch', 'https://v/7')]),
-        ['X · 🇬🇧 · mixdrop.ps', 'X · 🇫🇷 · voe.sx']);
+    // nothing German at all: the plugin shows nothing (other addons cover other languages)
+    assert.deepStrictEqual(await names([s('mixdrop.ps · Englisch', 'https://v/6'), s('voe.sx · Französisch', 'https://v/7')]), []);
     // the file name adds source and audio tags to the title
     const tagged = await provider(async () => [s('voe.sx · DE', 'https://v/gersub')]).getStreams('1', 'tv', 1, 1);
     assert.strictEqual(tagged[0].title, 'voe.sx · Original, dt. UT · BluRay · AC3 · H.264');
