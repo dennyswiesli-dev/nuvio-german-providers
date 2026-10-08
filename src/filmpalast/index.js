@@ -2,7 +2,7 @@ import { getText, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { pickBest } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
-import { resolveEmbed } from '../../shared/extractors/index.js';
+import { resolveEmbed, byHoster } from '../../shared/extractors/index.js';
 
 const BASE = 'https://filmpalast.to';
 const pad = n => String(n).padStart(2, '0');
@@ -32,7 +32,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             const a = $('a.iconPlay', ul).first();
             return { host: $('.hostName', ul).text().trim(), link: a.attr('data-player-url') || a.attr('href') };
         }).filter(m => /^https?:/.test(m.link || ''));
-        const streams = await gather(mirrors, m => resolveEmbed(m.link, BASE + '/').then(r => r.map(s => ({
+        const streams = await gather(byHoster(mirrors, m => `${m.host} ${m.link}`), m => resolveEmbed(m.link, BASE + '/').then(r => r.map(s => ({
             name: 'FilmPalast',
             title: `${s.host || m.host} · Deutsch${s.quality !== 'auto' ? ' · ' + s.quality : ''}`,
             url: s.url,

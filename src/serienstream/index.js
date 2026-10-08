@@ -1,7 +1,7 @@
 import { getText, provider, request } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { load, all } from '../../shared/dom.js';
-import { resolveEmbed } from '../../shared/extractors/index.js';
+import { resolveEmbed, byHoster } from '../../shared/extractors/index.js';
 import { bySlug, cookieHeader, followRedirect, pickSeries, splitSeasonPath } from './common.js';
 
 const BASE = 'https://serienstream.to';
@@ -31,8 +31,9 @@ async function getStreams(tmdbId, mediaType, season, episode) {
             // "Provider" links always answer 410
             // Doodstream answers every non-browser client with a Cloudflare challenge, so a link spent on it is wasted
             const links = all($, '.link-wrapper button').filter(b => !/^Provider$|dood/i.test(b.attr('data-provider-name') || '')).map(b => ({
-                url: b.attr('data-play-url'), lang: b.attr('data-language-label'), langId: b.attr('data-language-id'),
+                url: b.attr('data-play-url'), lang: b.attr('data-language-label'), langId: b.attr('data-language-id'), host: b.attr('data-provider-name'),
             }));
+            links.splice(0, links.length, ...byHoster(links, l => l.host));
             return { epUrl, links, cookie };
         };
         let page = await episodePage(`${series.link}/staffel-${season}/episode-${episode}`);

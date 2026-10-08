@@ -1,7 +1,21 @@
 import { getJson } from './http.js';
 
 // Nuvio injects TMDB_API_KEY as a global; test.js sets it from the environment.
-export async function getMeta(tmdbId, mediaType) {
+// Every plugin asks TMDB for the same title, so plugins that run in one JS runtime share the answer for a minute (each
+// bundle has its own module state, but the global is common). Failed requests are not kept.
+const CACHE_MS = 60000;
+export function getMeta(tmdbId, mediaType) {
+    const cache = globalThis.__germanProvidersMeta || (globalThis.__germanProvidersMeta = {});
+    const key = `${mediaType === 'tv' ? 'tv' : 'movie'}:${tmdbId}`;
+    const hit = cache[key];
+    if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+    const promise = fetchMeta(tmdbId, mediaType);
+    cache[key] = { at: Date.now(), promise };
+    promise.catch(() => { if (cache[key] && cache[key].promise === promise) delete cache[key]; });
+    return promise;
+}
+
+async function fetchMeta(tmdbId, mediaType) {
     const type = mediaType === 'tv' ? 'tv' : 'movie';
     const d = await getJson(`https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${globalThis.TMDB_API_KEY}&language=de-DE&append_to_response=external_ids,translations,alternative_titles`);
     const tr = ((d.translations || {}).translations || []);

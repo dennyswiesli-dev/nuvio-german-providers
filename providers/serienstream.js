@@ -241,7 +241,20 @@ var postForm = (url, form, opts = {}) => getText(url, Object.assign({}, opts, {
 }));
 
 // shared/tmdb.js
+var CACHE_MS = 6e4;
 function getMeta(tmdbId, mediaType) {
+  const cache = globalThis.__germanProvidersMeta || (globalThis.__germanProvidersMeta = {});
+  const key = `${mediaType === "tv" ? "tv" : "movie"}:${tmdbId}`;
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+  const promise = fetchMeta(tmdbId, mediaType);
+  cache[key] = { at: Date.now(), promise };
+  promise.catch(() => {
+    if (cache[key] && cache[key].promise === promise) delete cache[key];
+  });
+  return promise;
+}
+function fetchMeta(tmdbId, mediaType) {
   return __async(this, null, function* () {
     const type = mediaType === "tv" ? "tv" : "movie";
     const d = yield getJson(`https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${globalThis.TMDB_API_KEY}&language=de-DE&append_to_response=external_ids,translations,alternative_titles`);
@@ -509,6 +522,24 @@ function resolveEmbed(url, referer) {
     }
   });
 }
+var PREFERRED = [
+  /voe|goofy-banana|nathanfromsubject|metagnathtuggers/,
+  /vidsonic|vidara|odysseusa/,
+  /vidhide|filelions|ryderjet|smoothpre|dhtpre|peytonepre/,
+  /streamwish|wishembed|luluvdo|lulustream|swdyu|strwish|streamruby|savefiles/,
+  /supervideo|dropload|abstream|dr0pstream/,
+  /filemoon/,
+  /vidoza|videzz/,
+  /streamtape|shavetape|watchadsontape/,
+  /mixdrop|mixdrp|mxdrop/
+];
+var hosterRank = (text) => {
+  const t = String(text || "").toLowerCase();
+  if (/dood|d000d|vide0\.net|playmogo|dsvplay|ds2play/.test(t)) return PREFERRED.length + 1;
+  const i = PREFERRED.findIndex((re) => re.test(t));
+  return i < 0 ? 3 : i;
+};
+var byHoster = (items, text = (x) => x) => items.map((x, i) => [x, i]).sort(([a, i], [b, j]) => hosterRank(text(a)) - hosterRank(text(b)) || i - j).map(([x]) => x);
 
 // shared/match.js
 function norm(s) {
@@ -602,8 +633,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
         const links2 = all($, ".link-wrapper button").filter((b) => !/^Provider$|dood/i.test(b.attr("data-provider-name") || "")).map((b) => ({
           url: b.attr("data-play-url"),
           lang: b.attr("data-language-label"),
-          langId: b.attr("data-language-id")
+          langId: b.attr("data-language-id"),
+          host: b.attr("data-provider-name")
         }));
+        links2.splice(0, links2.length, ...byHoster(links2, (l) => l.host));
         return { epUrl: epUrl2, links: links2, cookie: cookie2 };
       });
       let page = yield episodePage(`${series.link}/staffel-${season}/episode-${episode}`);

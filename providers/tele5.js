@@ -236,7 +236,20 @@ var postJson = (url, body, opts = {}) => getJson(url, Object.assign({}, opts, {
 }));
 
 // shared/tmdb.js
+var CACHE_MS = 6e4;
 function getMeta(tmdbId, mediaType) {
+  const cache = globalThis.__germanProvidersMeta || (globalThis.__germanProvidersMeta = {});
+  const key = `${mediaType === "tv" ? "tv" : "movie"}:${tmdbId}`;
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+  const promise = fetchMeta(tmdbId, mediaType);
+  cache[key] = { at: Date.now(), promise };
+  promise.catch(() => {
+    if (cache[key] && cache[key].promise === promise) delete cache[key];
+  });
+  return promise;
+}
+function fetchMeta(tmdbId, mediaType) {
   return __async(this, null, function* () {
     const type = mediaType === "tv" ? "tv" : "movie";
     const d = yield getJson(`https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${globalThis.TMDB_API_KEY}&language=de-DE&append_to_response=external_ids,translations,alternative_titles`);

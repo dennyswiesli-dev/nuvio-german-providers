@@ -253,7 +253,20 @@ var postForm = (url, form, opts = {}) => getText(url, Object.assign({}, opts, {
 }));
 
 // shared/tmdb.js
+var CACHE_MS = 6e4;
 function getMeta(tmdbId, mediaType) {
+  const cache = globalThis.__germanProvidersMeta || (globalThis.__germanProvidersMeta = {});
+  const key = `${mediaType === "tv" ? "tv" : "movie"}:${tmdbId}`;
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+  const promise = fetchMeta(tmdbId, mediaType);
+  cache[key] = { at: Date.now(), promise };
+  promise.catch(() => {
+    if (cache[key] && cache[key].promise === promise) delete cache[key];
+  });
+  return promise;
+}
+function fetchMeta(tmdbId, mediaType) {
   return __async(this, null, function* () {
     const type = mediaType === "tv" ? "tv" : "movie";
     const d = yield getJson(`https://api.themoviedb.org/3/${type}/${tmdbId}?api_key=${globalThis.TMDB_API_KEY}&language=de-DE&append_to_response=external_ids,translations,alternative_titles`);
@@ -542,6 +555,24 @@ function resolveEmbed(url, referer) {
     }
   });
 }
+var PREFERRED = [
+  /voe|goofy-banana|nathanfromsubject|metagnathtuggers/,
+  /vidsonic|vidara|odysseusa/,
+  /vidhide|filelions|ryderjet|smoothpre|dhtpre|peytonepre/,
+  /streamwish|wishembed|luluvdo|lulustream|swdyu|strwish|streamruby|savefiles/,
+  /supervideo|dropload|abstream|dr0pstream/,
+  /filemoon/,
+  /vidoza|videzz/,
+  /streamtape|shavetape|watchadsontape/,
+  /mixdrop|mixdrp|mxdrop/
+];
+var hosterRank = (text) => {
+  const t = String(text || "").toLowerCase();
+  if (/dood|d000d|vide0\.net|playmogo|dsvplay|ds2play/.test(t)) return PREFERRED.length + 1;
+  const i = PREFERRED.findIndex((re) => re.test(t));
+  return i < 0 ? 3 : i;
+};
+var byHoster = (items, text = (x) => x) => items.map((x, i) => [x, i]).sort(([a, i], [b, j]) => hosterRank(text(a)) - hosterRank(text(b)) || i - j).map(([x]) => x);
 
 // src/serienstream/common.js
 function followRedirect(url, referer, cookie) {
@@ -617,8 +648,10 @@ function episodePage(path) {
     const $ = load(yield getText(epUrl));
     const links = all($, ".hosterSiteVideo ul li").map((li) => ({
       url: li.attr("data-link-target"),
-      lang: li.attr("data-lang-key")
-    })).filter((l) => l.url).sort((x, y) => (ORDER[x.lang] || 0) - (ORDER[y.lang] || 0));
+      lang: li.attr("data-lang-key"),
+      host: li.text().replace(/\s+/g, " ").trim()
+    })).filter((l) => l.url);
+    links.splice(0, links.length, ...byHoster(links, (l) => l.host).sort((x, y) => (ORDER[x.lang] || 0) - (ORDER[y.lang] || 0)));
     return { epUrl, $, links };
   });
 }

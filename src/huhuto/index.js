@@ -1,6 +1,6 @@
 import { request, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
-import { resolveEmbed } from '../../shared/extractors/index.js';
+import { resolveEmbed, byHoster } from '../../shared/extractors/index.js';
 
 const BASE = 'https://huhu.to';
 const LANG = { de: 'Deutsch', en: 'Englisch', fr: 'Französisch', es: 'Spanisch', ja: 'Japanisch', jp: 'Japanisch' };
@@ -33,9 +33,9 @@ async function resolve(src) {
 async function getStreams(tmdbId, mediaType, season, episode) {
     try {
         const meta = await getMeta(tmdbId, mediaType);
-        // German sources first: Nuvio TV runs a plugin's requests one after the other
         const german = s => ((s.languages || ['de']).includes('de') ? 0 : 1);
-        const list = (await sources(meta, season, episode)).filter(s => s.type === 'url' && s.url).sort((a, b) => german(a) - german(b));
+        // German sources first, within them the more reliable hosters first (both sorts are stable)
+        const list = byHoster((await sources(meta, season, episode)).filter(s => s.type === 'url' && s.url), s => s.url).sort((a, b) => german(a) - german(b));
         return gather(list, resolve);
     } catch (e) {
         console.error(`[Huhu] ${e.message}`);

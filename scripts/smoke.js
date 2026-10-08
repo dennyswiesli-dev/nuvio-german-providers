@@ -34,6 +34,26 @@ async function probe(url) {
     }
 }
 
+// the first (best) stream: does the URL answer with video data? Reads only the first chunk, never the whole file.
+async function playable(stream) {
+    try {
+        const res = await withTimeout(fetch(stream.url, { headers: Object.assign({ 'User-Agent': 'Mozilla/5.0', Range: 'bytes=0-2047' }, stream.headers) }), 25);
+        const type = res.headers.get('content-type') || '';
+        let head = '';
+        if (res.body && res.body.getReader) {
+            const reader = res.body.getReader();
+            const { value } = await reader.read();
+            head = Buffer.from(value || []).toString('latin1', 0, 16);
+            await reader.cancel().catch(() => {});
+        }
+        if (res.status < 400 && (/video|mpegurl|octet|mp4|binary/i.test(type) || head.startsWith('#EXTM3U'))) return { ok: true };
+        if (res.status === 404 || res.status === 410) return { dead: true, note: `HTTP ${res.status}` };
+        return { note: `HTTP ${res.status} ${type}`.trim() };
+    } catch (e) {
+        return { note: e.message };
+    }
+}
+
 async function check(id) {
     const entry = config[id];
     if (!entry) return { id, status: 'fail', note: 'no smoke candidates in scripts/smoke.json' };
@@ -45,7 +65,13 @@ async function check(id) {
         logged.length = 0;
         try {
             const streams = await withTimeout(getStreams(String(c.tmdbId), c.type, c.season || null, c.episode || null), entry.timeout || 90);
-            if (streams && streams.length && /^https?:/.test(streams[0].url)) return { id, status: 'ok', note: `${streams.length} stream(s) for ${label} (${streams.slice(0, 6).map(s => s.quality).join(', ')})` };
+            if (streams && streams.length && /^https?:/.test(streams[0].url)) {
+                const found = `${streams.length} stream(s) for ${label} (${streams.slice(0, 6).map(s => s.quality).join(', ')})`;
+                const p = await playable(streams[0]);
+                if (p.ok) return { id, status: 'ok', note: `${found}, plays` };
+                // a 404 means the link is dead; anything else may only be this IP being refused
+                return { id, status: p.dead ? 'fail' : 'blocked', note: `${found}, but the best stream does not answer: ${p.note}` };
+            }
         } catch (e) {
             logged.push(e.message);
         }

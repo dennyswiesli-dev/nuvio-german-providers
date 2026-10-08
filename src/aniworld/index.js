@@ -2,7 +2,7 @@ import { getText, postForm, provider, gather } from '../../shared/http.js';
 import { getMeta } from '../../shared/tmdb.js';
 import { norm } from '../../shared/match.js';
 import { load, all } from '../../shared/dom.js';
-import { resolveEmbed } from '../../shared/extractors/index.js';
+import { resolveEmbed, byHoster } from '../../shared/extractors/index.js';
 import { bySlug, followRedirect, pickSeries, splitSeasonPath } from '../serienstream/common.js';
 
 const BASE = 'https://aniworld.to';
@@ -37,8 +37,10 @@ async function episodePage(path) {
     const epUrl = BASE + path;
     const $ = load(await getText(epUrl));
     const links = all($, '.hosterSiteVideo ul li').map(li => ({
-        url: li.attr('data-link-target'), lang: li.attr('data-lang-key'),
-    })).filter(l => l.url).sort((x, y) => (ORDER[x.lang] || 0) - (ORDER[y.lang] || 0));
+        url: li.attr('data-link-target'), lang: li.attr('data-lang-key'), host: li.text().replace(/\s+/g, ' ').trim(),
+    })).filter(l => l.url);
+    // German first, within a language the more reliable hosters first (the sorts are stable)
+    links.splice(0, links.length, ...byHoster(links, l => l.host).sort((x, y) => (ORDER[x.lang] || 0) - (ORDER[y.lang] || 0)));
     return { epUrl, $, links };
 }
 
