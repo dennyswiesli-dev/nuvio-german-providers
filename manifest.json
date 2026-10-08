@@ -2,7 +2,7 @@
   "name": "German Providers",
   "version": "1.0.13",
   "description": "Deutsche Quellen für Nuvio – portiert von Bnyro/GermanProviders (CloudStream)",
-  "author": "Dennys Wiesli",
+  "author": "dw98-git",
   "scrapers": [
     {
       "id": "netzkino",
