@@ -19,6 +19,6 @@
     "crypto-js": "^4.2.0",
     "esbuild": "^0.25.0"
   },
-  "author": "Dennys Wiesli",
+  "author": "dw98-git",
   "license": "GPL-3.0-or-later"
 }

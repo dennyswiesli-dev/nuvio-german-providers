@@ -2,11 +2,11 @@
 
 ## Eigenständige Nuvio-Portierung
 
-Dieses Repository ist ein Fork der Arbeit von `InvalidPandaa/nuvio-german-providers` und wird von Dennys Wiesli eigenständig für Nuvio weitergeführt. Die zugrunde liegende Provider-Logik stammt aus `Bnyro/GermanProviders`. Änderungen am CloudStream-Original werden regelmäßig überwacht; aufgrund der unterschiedlichen Implementierungen werden sie nicht blind in JavaScript überschrieben, sondern als Upstream-Update zur Prüfung gemeldet.
+Dieses Repository ist ein Fork der Arbeit von `InvalidPandaa/nuvio-german-providers` und wird von dw98-git eigenständig für Nuvio weitergeführt. Die zugrunde liegende Provider-Logik stammt aus `Bnyro/GermanProviders`. Änderungen am CloudStream-Original werden regelmäßig überwacht; aufgrund der unterschiedlichen Implementierungen werden sie nicht blind in JavaScript überschrieben, sondern als Upstream-Update zur Prüfung gemeldet.
 
 > [!WARNING]
 > Dieses Projekt ist noch in Entwicklung. Einzelne Provider können ausfallen, weil sich die Seiten oder Hoster ändern.
-> Wenn etwas nicht funktioniert, [öffne gerne ein Issue](https://github.com/dennyswiesli-dev/nuvio-german-providers/issues/new).
+> Wenn etwas nicht funktioniert, [öffne gerne ein Issue](https://github.com/dw98-git/nuvio-german-providers/issues/new).
 
 Deutsche Quellen für [Nuvio](https://github.com/NuvioMedia), portiert aus dem CloudStream-Repo
 [Bnyro/GermanProviders](https://github.com/Bnyro/GermanProviders). Anders als die CloudStream-`.cs3`-Erweiterungen
@@ -18,7 +18,7 @@ auf allen Plattformen: Android, Android TV, iOS, macOS, Windows.
 In Nuvio in den Plugin-Einstellungen ein Repository mit der **rohen** URL der `manifest.json` hinzufügen:
 
 ```
-https://dennyswiesli-dev.github.io/nuvio-german-providers/manifest.json
+https://dw98-git.github.io/nuvio-german-providers/manifest.json
 ```
 
 
@@ -40,7 +40,7 @@ https://dennyswiesli-dev.github.io/nuvio-german-providers/manifest.json
 
 ## Status
 
-Ein täglicher [Smoke-Test](.github/workflows/smoke.yml) ruft jeden Provider mit bekannten Titeln auf. Liefert ein Provider keine Streams mehr, öffnet der Workflow das Issue „Provider-Smoke-Test: Ausfälle" und schließt es wieder, sobald alles läuft. Den aktuellen Stand findest du im [Workflow-Verlauf](https://github.com/dennyswiesli-dev/nuvio-german-providers/actions/workflows/smoke.yml).
+Ein täglicher [Smoke-Test](.github/workflows/smoke.yml) ruft jeden Provider mit bekannten Titeln auf. Liefert ein Provider keine Streams mehr, öffnet der Workflow das Issue „Provider-Smoke-Test: Ausfälle" und schließt es wieder, sobald alles läuft. Den aktuellen Stand findest du im [Workflow-Verlauf](https://github.com/dw98-git/nuvio-german-providers/actions/workflows/smoke.yml).
 
 ## Von bestimmten IPs blockiert
 
