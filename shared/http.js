@@ -85,15 +85,33 @@ function bestVariant(text) {
     return best;
 }
 
+// The details are optional, so a slow host must not hold the stream list up: abort after DETAIL_TIMEOUT_MS where the
+// runtime can (AbortController and timers); elsewhere the request just runs as before.
+const DETAIL_TIMEOUT_MS = 5000;
+async function timed(url, opts, readBody) {
+    if (typeof AbortController === 'undefined' || typeof setTimeout !== 'function') {
+        const res = await send(url, opts);
+        return { res, text: readBody && res.ok ? await res.text() : '' };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
+    try {
+        const res = await send(url, Object.assign({}, opts, { signal: controller.signal }));
+        return { res, text: readBody && res.ok ? await res.text() : '' };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function playlistInfo(stream) {
     try {
-        const res = await send(stream.url, { headers: Object.assign({ 'User-Agent': UA }, stream.headers) });
+        const { res, text } = await timed(stream.url, { headers: Object.assign({ 'User-Agent': UA }, stream.headers) }, true);
         if (!res.ok) {
             console.error(`[quality] playlist answered HTTP ${res.status}`);
             // 404/410 mean the stream is gone; 403 and friends may only block this request, so those stay
             return res.status === 404 || res.status === 410 ? { dead: true } : null;
         }
-        const best = bestVariant(String(await res.text()));
+        const best = bestVariant(String(text));
         if (!best) console.error('[quality] playlist lists no variants');
         return best;
     } catch (e) {
@@ -105,7 +123,7 @@ async function playlistInfo(stream) {
 // MP4 size from a HEAD request (no body, unlike a range request that a server may ignore)
 async function fileSize(stream) {
     try {
-        const res = await send(stream.url, { method: 'HEAD', headers: Object.assign({ 'User-Agent': UA }, stream.headers) });
+        const { res } = await timed(stream.url, { method: 'HEAD', headers: Object.assign({ 'User-Agent': UA }, stream.headers) }, false);
         if (res.status === 404 || res.status === 410) return { dead: true };
         const bytes = res.ok && Number(res.headers.get('content-length'));
         return bytes > 1e6 ? { bytes } : null;
@@ -180,6 +198,10 @@ function shape(list) {
 // Runs worker over items a few at a time and stops starting new ones once enough streams are in: fewer requests,
 // quicker answers, and fewer links spent on sites that count them. Requests already running always finish.
 const BATCH = 3, ENOUGH = 6;
+
+// Sites list hosters in any language order. German ones go first, or the early stop below could skip them.
+const isGerman = text => /deutsch|german|\bde\b|\bger\b/i.test(text || '') && !/sub|untertitel|\but\b/i.test(text || '');
+export const germanFirst = (items, text) => items.map((x, i) => [x, i]).sort(([a, i], [b, j]) => isGerman(text(a)) ? (isGerman(text(b)) ? i - j : -1) : (isGerman(text(b)) ? 1 : i - j)).map(([x]) => x);
 export async function gather(items, worker, enough = ENOUGH) {
     const out = [];
     for (let i = 0; i < items.length && out.length < enough; i += BATCH) {
