@@ -184,17 +184,24 @@ function shape(list) {
     list = list.filter(d => d.tier === best);
     // gone streams (HTTP 404/410 on the playlist or file)
     list = keepIfAny(list, d => !d.dead);
-    // one entry per hoster and language: the best resolution, then bitrate, else the first
+    // one entry per hoster, language and weight class (Full HD and up / lighter): the best resolution, then bitrate, else
+    // the first. The lighter one stays because boxes like a Fire TV stall on the big stream.
+    const heavy = d => (heightOf(d) > 720 ? 'big' : 'light');
     const better = (a, b) => heightOf(a) - heightOf(b) || a.bandwidth - b.bandwidth;
     const first = {};
     list.forEach(d => {
-        const key = `${d.lang}|${d.host}`;
+        const key = `${d.lang}|${d.host}|${heavy(d)}`;
         if (!first[key] || better(d, first[key]) > 0) first[key] = d;
     });
-    list = list.filter(d => first[`${d.lang}|${d.host}`] === d);
+    list = list.filter(d => first[`${d.lang}|${d.host}|${heavy(d)}`] === d);
     list = keepIfAny(list, d => !(heightOf(d) > 0 && heightOf(d) <= MIN_HEIGHT));
     // best first: known resolutions descending, unknown ones behind them
-    return list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d).slice(0, MAX_STREAMS);
+    list = list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d);
+    const top = list.slice(0, MAX_STREAMS);
+    // the cut must not leave only heavy streams: swap the last one for the best lighter one
+    const light = list.find(d => heavy(d) === 'light' && heightOf(d) > 0);
+    if (light && !top.includes(light) && top.every(d => heavy(d) === 'big')) top[top.length - 1] = light;
+    return top;
 }
 
 // Runs worker over items a few at a time and stops starting new ones once enough streams are in: fewer requests,

@@ -185,15 +185,20 @@ function shape(list) {
   if (best > 1) return [];
   list = list.filter((d) => d.tier === best);
   list = keepIfAny(list, (d) => !d.dead);
+  const heavy = (d) => heightOf(d) > 720 ? "big" : "light";
   const better = (a, b) => heightOf(a) - heightOf(b) || a.bandwidth - b.bandwidth;
   const first = {};
   list.forEach((d) => {
-    const key = `${d.lang}|${d.host}`;
+    const key = `${d.lang}|${d.host}|${heavy(d)}`;
     if (!first[key] || better(d, first[key]) > 0) first[key] = d;
   });
-  list = list.filter((d) => first[`${d.lang}|${d.host}`] === d);
+  list = list.filter((d) => first[`${d.lang}|${d.host}|${heavy(d)}`] === d);
   list = keepIfAny(list, (d) => !(heightOf(d) > 0 && heightOf(d) <= MIN_HEIGHT));
-  return list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d).slice(0, MAX_STREAMS);
+  list = list.map((d, i) => [d, i]).sort(([a, i], [b, j]) => heightOf(b) - heightOf(a) || b.bandwidth - a.bandwidth || i - j).map(([d]) => d);
+  const top = list.slice(0, MAX_STREAMS);
+  const light = list.find((d) => heavy(d) === "light" && heightOf(d) > 0);
+  if (light && !top.includes(light) && top.every((d) => heavy(d) === "big")) top[top.length - 1] = light;
+  return top;
 }
 var BATCH = 5;
 var ENOUGH = 6;
