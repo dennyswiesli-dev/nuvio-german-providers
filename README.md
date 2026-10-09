@@ -24,6 +24,8 @@ https://dw98-git.github.io/nuvio-german-providers/manifest.json
 
 ## Provider
 
+Aus: ARD, Arte, DMAX, FlixiTV, Netzkino, Pluto TV, South Park, Tele5 und TLC sind in `manifest.json` mit `"enabled": false` abgeschaltet (Nuvio fragt sie nicht ab, der Smoke-Test überspringt sie). Zum Einschalten die Zeile entfernen und `npm run bump` ausführen.
+
 | Provider | Inhalte | Hinweise |
 |---|---|---|
 | ARD Mediathek | Filme, Serien | FSK16+ nur 22–6 Uhr (ARD-Regel) |
