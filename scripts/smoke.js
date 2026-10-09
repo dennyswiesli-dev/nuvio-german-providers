@@ -13,7 +13,7 @@ const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'smoke.json'), 'u
 delete config._comment;
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const wanted = process.argv.slice(2);
-const ids = manifest.scrapers.map(s => s.id).filter(id => !wanted.length || wanted.includes(id));
+const ids = manifest.scrapers.filter(s => s.enabled !== false).map(s => s.id).filter(id => !wanted.length || wanted.includes(id));
 
 // providers swallow their errors and return [], so their console.error output is the only hint why nothing came back
 const logged = [];
